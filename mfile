@@ -1,0 +1,10 @@
+{
+  "package": "Mapper",
+  "title": "GMCP mapper script for Mudlet",
+  "description": "It does the mapping or it gets the hose.",
+  "version": "1.0.0",
+  "author": "gesslar",
+  "icon": "treasure-map.png",
+  "dependencies": "",
+  "outputFile": true
+}
