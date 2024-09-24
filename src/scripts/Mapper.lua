@@ -7,7 +7,7 @@ table.unpack = unpack
 
 ---@class Mapper
 -- Mapper setup
-Mapper = {
+Mapper = Mapper or {
   config = {
     speedwalk_path = {},          -- Speedwalk path
     speedwalk_delay = 0.0,        -- Speedwalk delay
@@ -16,8 +16,8 @@ Mapper = {
     walk_timer_name = nil,        -- Walk timer name
     walk_step = nil,              -- The next room id for the speedwalk
     package_name = "__PKGNAME__", -- Name of the package
-    name = "gMap",              -- Name of the script
-    prefix = "gMap.",           -- Prefix for handlers
+    name = "Mapper",              -- Name of the script
+    prefix = "Mapper.",           -- Prefix for handlers
     gmcp = {
       event = "gmcp.Room.Info",
       expect_coordinates = true,
@@ -57,38 +57,38 @@ Mapper = {
   },
   terrain = {
     types = {
-      ["default"]       = { id = 500, color = { 220, 220, 220, 255 } }, -- Light Gray
-      ["beach"]         = { id = 501, color = { 255, 223, 186, 255 } }, -- Light Sand
-      ["desert"]        = { id = 502, color = { 244, 164, 96, 255 } }, -- Sandy Brown
-      ["dirt road"]     = { id = 503, color = { 139, 69, 19, 255 } },  -- Saddle Brown
-      ["forest"]        = { id = 504, color = { 34, 139, 34, 255 } },  -- Forest Green
-      ["grass"]         = { id = 505, color = { 144, 238, 144, 255 } }, -- Light Green
-      ["grassy"]        = { id = 505, color = { 144, 238, 144, 255 } }, -- Light Green
-      ["indoor"]        = { id = 506, color = { 60, 42, 33, 255 } },   -- Rich Mocha
-      ["mountain"]      = { id = 507, color = { 169, 169, 169, 255 } }, -- Dark Gray
-      ["mud"]           = { id = 508, color = { 101, 67, 33, 255 } },  -- Dark Brown
-      ["path"]          = { id = 509, color = { 210, 180, 140, 255 } }, -- Light Brown
-      ["road"]          = { id = 510, color = { 160, 120, 90, 255 } }, -- Soft Brown
-      ["sand"]          = { id = 511, color = { 238, 214, 175, 255 } }, -- Soft Sand
-      ["snow"]          = { id = 512, color = { 255, 250, 250, 255 } }, -- Snow White
-      ["swamp"]         = { id = 513, color = { 86, 125, 70, 255 } },  -- Dark Olive Green
-      ["water"]         = { id = 514, color = { 35, 90, 186, 255 } },  -- Light Blue
-      ["tunnels"]       = { id = 515, color = { 102, 85, 68, 255 } },  -- Greyish Brown
-      ["sandy"]         = { id = 516, color = { 255, 223, 186, 255 } }, -- Light Sand
-      ["rocky"]         = { id = 518, color = { 139, 137, 137, 255 } }, -- Dark Gray
-      ["impassable"]    = { id = 519, color = { 0, 50, 0, 255 } },     -- Very dark green
-      ["dusty"]         = { id = 520, color = { 102, 85, 68, 255 } },  -- Greyish Brown
-      ["shallow water"] = { id = 521, color = { 40, 139, 184, 255 } }, -- Light Blue
-      ["deep water"]    = { id = 522, color = { 24, 63, 130, 255 } },  -- Light Blue
+      ["default"]       = { id = 500, color = table.deepcopy(color_table["gainsboro"]) },
+      ["beach"]         = { id = 501, color = table.deepcopy(color_table["navajo_white"]) },
+      ["desert"]        = { id = 502, color = table.deepcopy(color_table["sandy_brown"]) },
+      ["dirt road"]     = { id = 503, color = table.deepcopy(color_table["saddle_brown"]) },
+      ["forest"]        = { id = 504, color = table.deepcopy(color_table["forest_green"]) },
+      ["grass"]         = { id = 505, color = table.deepcopy(color_table["pale_green"]) },
+      ["grassy"]        = { id = 505, color = table.deepcopy(color_table["pale_green"]) },
+      ["indoor"]        = { id = 506, color = table.deepcopy(color_table["brown"]) },
+      ["mountain"]      = { id = 507, color = table.deepcopy(color_table["gray"]) },
+      ["mud"]           = { id = 508, color = table.deepcopy(color_table["brown"]) },
+      ["path"]          = { id = 509, color = table.deepcopy(color_table["tan"]) },
+      ["road"]          = { id = 510, color = table.deepcopy(color_table["sienna"]) },
+      ["sand"]          = { id = 511, color = table.deepcopy(color_table["pale_goldenrod"]) },
+      ["snow"]          = { id = 512, color = table.deepcopy(color_table["snow"]) },
+      ["swamp"]         = { id = 513, color = table.deepcopy(color_table["dark_olive_green"]) },
+      ["water"]         = { id = 514, color = table.deepcopy(color_table["steel_blue"]) },
+      ["tunnels"]       = { id = 515, color = table.deepcopy(color_table["brown"]) },
+      ["sandy"]         = { id = 516, color = table.deepcopy(color_table["navajo_white"]) },
+      ["rocky"]         = { id = 518, color = table.deepcopy(color_table["gray"]) },
+      ["impassable"]    = { id = 519, color = table.deepcopy(color_table["dark_green"]) },
+      ["dusty"]         = { id = 520, color = table.deepcopy(color_table["brown"]) },
+      ["shallow water"] = { id = 521, color = table.deepcopy(color_table["steel_blue"]) },
+      ["deep water"]    = { id = 522, color = table.deepcopy(color_table["midnight_blue"]) },
     },
     -- Terrain types we will never path through. Using lockRoom() to prevent
     -- pathing through these terrain types.
-    prevent_terrain_types = {
+    prevent = {
       522, -- Deep Water
     },
     -- Terrain types we will avoid when pathing. Using setRoomWeight() to avoid
     -- these terrain types, unless we have no other choice.
-    avoid_terrain_types = {
+    avoid = {
       [514] = 100, -- Water
     },
   },
@@ -144,56 +144,54 @@ Mapper = {
       [17] = { 1, 0, 1 },   [18] = { -1, 0, -1 }, [19] = { -1, 0, 1 }, [20] = { 1, 0, -1 },
     }
   },
+  tags = {
+    mapper = { "%s", table.deepcopy(color_table["orange_red"]), table.deepcopy(color_table["orange"]  ) },
+    warning = { "%s", table.deepcopy(color_table["orange"]), table.deepcopy(color_table["orange_red"]) },
+    error = { "%s", table.deepcopy(color_table["red"]), table.deepcopy(color_table["orange_red"]) },
+    info = { "%s", table.deepcopy(color_table["chartreuse"]), table.deepcopy(color_table["olive_drab"]) },
+  },
   move_tracking = {}, -- Move tracking for room movements
+  recalls = {}, -- Recall points for rooms
 }
 
-Mapper.default_event_handlers = {
+-- ----------------------------------------------------------------------------
+-- Event Handlers
+-- ----------------------------------------------------------------------------
+
+Mapper.default_event_handlers = Mapper.default_event_handlers or {
   -- System events that we want to handle
-  "sysUninstall",
   "sysConnectionEvent",
   "sysExitEvent",
+  "sysLoadEvent",
   -- GMCP events that we want to handle
   Mapper.config.gmcp.event
 }
 
-function Mapper:EventHandler(event, arg1, arg2)
-  if event == "sysConnectionEvent" then
+function Mapper:EventHandler(event, ...)
+  if event == "sysLoadEvent" then
+    self:Setup()               -- no args
+  elseif event == "sysConnectionEvent" then
     self:Setup()               -- no args
   elseif event == "sysExitEvent" then
     self:Teardown()            -- no args
   elseif event == self.config.gmcp.event then
-    self:Move(arg1)            -- arg1 is the GMCP package name
+    self:Move(...)            -- arg1 is the GMCP package name
   end
 end
 
-function Mapper:Install(event, package)
-  if package ~= self.config.package_name then
-    return
-  end
+-- Basic event handlers
+registerNamedEventHandler(Mapper.config.name, "Mapper:Install", "sysInstall", "Mapper:Install", true)
+registerNamedEventHandler(Mapper.config.name, "Mapper:Uninstall", "sysUninstall", "Mapper:Uninstall", true)
 
-  if table.contains(getPackages(), "generic_mapper") then
-    uninstallPackage("generic_mapper")
-  end
-end
-
-function Mapper:Uninstall(event, package)
-  if package ~= self.config.package_name then
-    return
-  end
-
-  if self.walking then
-    cecho("<orange_red>Resetting walking.\n")
-  end
-  self:ResetWalking(true, "Script has been uninstalled.")
-  self:Teardown()
-  Mapper = nil
-end
+-- ----------------------------------------------------------------------------
+-- Setup and Teardown
+-- ----------------------------------------------------------------------------
 
 function Mapper:Setup()
   -- Set custom environment colors for terrain types
   for _, data in pairs(self.terrain.types) do
-    local r, g, b, a = table.unpack(data.color)
-    setCustomEnvColor(data.id, r, g, b, a)
+    local r, g, b = table.unpack(data.color)
+    setCustomEnvColor(data.id, r, g, b, 255)
   end
 
   -- Register event handlers
@@ -205,11 +203,20 @@ function Mapper:Setup()
     if registerNamedEventHandler(self.config.name, handler, event, function(...) self:EventHandler(...) end) then
       table.insert(self.event_handlers, handler)
     else
-      cecho("<orange_red>Failed to register event handler for " .. event .. "\n")
+      self:Echo("Failed to register event handler for " .. event, "error")
     end
   end
 
   self.walk_timer_name = self.config.prefix .. "walk_timer"
+
+  for tag_name, tag_info in pairs(self.tags) do
+    if tag_name == string.lower(self.config.name) then
+      tag_info[1] = string.format(tag_info[1], string.lower(self.config.name))
+    else
+      tag_info[1] = string.lower(tag_name)
+    end
+  end
+
   gmod.enableModule(self.config.name, "Room")
 end
 
@@ -231,25 +238,57 @@ function Mapper:Explode(str, delimiter)
   return result
 end
 
-function Mapper:TableFromPackage(gmcp_package)
-  -- Split the package string by the dots
-  local keys = self:Explode(gmcp_package, ".")
+-- ----------------------------------------------------------------------------
+-- Install/Uninstall
+-- ----------------------------------------------------------------------------
 
-  -- Start from the global gmcp table
-  local current_table = gmcp
+function Mapper:Install(event, package)
+  if package ~= self.config.package_name then
+    return
+  end
 
-  -- Traverse through the keys to find the nested table
-  for i = 2, #keys do
-    local key = keys[i]
-    if next(current_table) then
-      current_table = current_table[key]
-    else
-      return nil -- Return nil if the key doesn't exist
+  self:Setup()
+
+  if table.contains(getPackages(), "generic_mapper") then
+    self:Echo("Uninstalling package: generic_mapper")
+    uninstallPackage("generic_mapper")
+    if(table.contains(getPackages(), "generic_mapper")) then
+      self:Echo("Could not uninstall generic_mapper.", "warning")
+      self:Echo("Please uninstall it manually and restart Mudlet.", "warning")
+      return
     end
   end
 
-  return current_table
+  deleteNamedEventHandler(self.config.name, "Mapper:Install")
+
+  self:Echo(self.config.name .. " installed.")
+  self:Setup()
 end
+
+function Mapper:Uninstall(event, package)
+  if package ~= self.config.package_name then
+    return
+  end
+
+  if self.walking then
+    self:Echo("Resetting walking.")
+  end
+  self:ResetWalking(true, "Script has been uninstalled.")
+  self:Teardown()
+
+  self:Echo(self.config.name .. " uninstalled.")
+end
+
+-- ----------------------------------------------------------------------------
+-- Move
+--
+-- This function is called when the GMCP package is received. It updates the
+-- current room information and adds or updates the room in the map.
+--
+-- It sets the previous room to the current room and updates the current room
+-- with the new GMCP data. It then adds or updates the room in the map and
+-- updates the exits.
+-- ----------------------------------------------------------------------------
 
 function Mapper:Move(gmcp_package)
   local gmcp_table = self:TableFromPackage(gmcp_package) or {}
@@ -293,7 +332,7 @@ function Mapper:Move(gmcp_package)
 
   local room_id = self:AddOrUpdateRoom(self.info.current)
   if room_id == -1 then
-    cecho("<orange_red>Failed to add room.\n")
+    self:Echo("Failed to add room.", "error")
     return
   end
 
@@ -334,8 +373,18 @@ function Mapper:Move(gmcp_package)
 
   raiseEvent("onMoveMap", current_room_id)
 
-  resumeNamedTimer(self.config.name, self.walk_timer_name)
+  -- Take the next step in the speedwalk
+  if self.walking then
+    resumeNamedTimer(self.config.name, self.walk_timer_name)
+  end
 end
+
+-- ----------------------------------------------------------------------------
+-- AddOrUpdateRoom
+--
+-- This function adds or updates a room in the map based on the provided room
+-- information. It handles both hash and vnum-based room identification.
+-- ----------------------------------------------------------------------------
 
 function Mapper:AddOrUpdateRoom(info)
   local room_id
@@ -447,6 +496,13 @@ function Mapper:AddOrUpdateRoom(info)
   return room_id
 end
 
+-- ----------------------------------------------------------------------------
+-- CalculateCoordinates
+--
+-- This function calculates the coordinates of a room based on the previous
+-- room and the shift vectors. It returns the coordinates of the current room.
+-- ----------------------------------------------------------------------------
+
 function Mapper:CalculateCoordinates(roomID)
   local default_coordinates = { 0, 0, 0 }
 
@@ -473,8 +529,12 @@ function Mapper:CalculateCoordinates(roomID)
 
   for k, v in pairs(self.info.current[self.config.gmcp.properties.exits]) do
     if v == self.info.previous[compare_field] and self.vectors.name[k] then
-      shift = self.vectors.name[k]
-      break
+      if self.vectors.name[k] then
+        shift = self.vectors.name[k]
+        break
+      else
+        self:Echo("No shift vector found for " .. k .. ".", "warning")
+      end
     end
   end
 
@@ -543,10 +603,26 @@ function Mapper:UpdateExits(room_id)
   end
 end
 
--- doSpeedWalk remains a local function
+-- ----------------------------------------------------------------------------
+-- doSpeedWalk
+--
+-- This function starts the speedwalk process. It checks for necessary
+-- conditions and initiates the walking process if all checks pass.
+--
+-- This function is called directly by Mudlet when the user initiates a
+-- speedwalk by double-clicking on a room on the map, or through a script.
+-- ----------------------------------------------------------------------------
+
 function doSpeedWalk()
   Mapper:Speedwalk()
 end
+
+-- ----------------------------------------------------------------------------
+-- ResetWalking
+--
+-- This function resets the walking state and raises events when the walking
+-- process is interrupted or completed.
+-- ----------------------------------------------------------------------------
 
 function Mapper:ResetWalking(exception, reason)
   if table.contains(getNamedTimers(self.config.name), self.walk_timer_name) then
@@ -566,23 +642,38 @@ function Mapper:ResetWalking(exception, reason)
   end
 end
 
+-- ----------------------------------------------------------------------------
+-- Speedwalk
+--
+-- This function is called from doSpeedWalk. It checks for necessary
+-- conditions and initiates the walking process if all checks pass.
+-- ----------------------------------------------------------------------------
+
 function Mapper:Speedwalk()
-  if not next(self.info.current) then return end
+  if not self.info then
+    self:Echo("You are not in a room.", "error")
+    return
+  end
+
+  if not self.info.current then
+    self:Echo("You are not in a room.", "error")
+    return
+  end
 
   if self.walking then
-    cecho("<orange_red>You are already walking!\n")
+    self:Echo("You are already walking!", "error")
     return
   end
 
   self.speedwalk_path = {}
   if not next(self.info.current.exits) then
-    cecho("<orange_red>No speedwalk direction found.\n")
+    self:Echo("No speedwalk direction found.", "error")
     self:ResetWalking(true, "No speedwalk direction found.")
     return
   end
 
   if not next(speedWalkPath) then
-    cecho("<orange_red>No speedwalk path found.\n")
+    self:Echo("No speedwalk path found.", "error")
     self:ResetWalking(true, "No speedwalk path found.")
     return
   end
@@ -597,7 +688,7 @@ function Mapper:Speedwalk()
   -- Inserts {nil, room_id} at the beginning of the path
   local room_exits = getRoomExits(self.info.current.room_id) or {}
   if not next(room_exits) then
-    cecho("<orange_red>No exits found.\n")
+    self:Echo("No exits found.", "error")
     self:ResetWalking(true, "No exits found.")
     return
   end
@@ -610,6 +701,8 @@ function Mapper:Speedwalk()
     end
   end
 
+  -- This is the timer that calls the Step function repeatedly, initiating
+  -- the speedwalk's first step.
   self.walk_timer = registerNamedTimer(
     self.config.name,
     self.walk_timer_name,
@@ -619,7 +712,7 @@ function Mapper:Speedwalk()
   )
 
   if not self.walk_timer then
-    cecho("<orange_red>Failed to start walking.\n")
+    self:Echo("Failed to start walking.", "error")
     self:ResetWalking(true, "Failed to start walking.")
     return
   end
@@ -627,21 +720,33 @@ function Mapper:Speedwalk()
   self.walking = true
   local destination_id = self.speedwalk_path[#self.speedwalk_path][2]
   local destination_name = getRoomName(destination_id)
-  cecho("<aquamarine>Walking to " .. destination_name .. ".\n")
+  self:Echo("Walking to " .. destination_name .. ".", "info")
 
   raiseEvent("sysSpeedwalkStarted")
 end
 
+-- ----------------------------------------------------------------------------
+-- Step
+--
+-- This function performs a single step in the speedwalk process. It checks
+-- the current room's ID against the expected room's ID, handles the starting
+-- room, and sends the appropriate direction command to move to the next room.
+--
+-- It is called by the initial timer set in Speedwalk and if there are
+-- remaining steps to be taken, as determined by the Move function, then
+-- it will be called again.
+-- ----------------------------------------------------------------------------
+
 function Mapper:Step()
   if not next(self.speedwalk_path) then
-    cecho("<aquamarine>You have arrived at " .. self.info.current.name .. ".\n")
+    self:Echo("You have arrived at " .. self.info.current.name .. ".", "info")
     self:ResetWalking(false, "Arrived at destination.")
     return
   end
 
   local current_room_id = self.info.current.room_id
   if not current_room_id then
-    cecho("<orange_red>Unable to determine your current location.\n")
+    self:Echo("Unable to determine your current location.", "error")
     self:ResetWalking(true, "Unable to determine your current location.")
     return
   end
@@ -651,16 +756,16 @@ function Mapper:Step()
   -- Check if this is the starting room (which doesn't have a direction)
   if current_step[1] == "" then
     if current_room_id ~= current_step[2] then
-      cecho("<orange_red>You are not in the expected starting room.\n")
-      cecho("<orange_red>Expected you to be in room " .. current_step[2] .. " (" .. getRoomName(current_step[2]) .. ").\n")
-      cecho("<orange_red>Current room: " .. current_room_id .. " (" .. getRoomName(current_room_id) .. ").\n")
+      self:Echo("You are not in the expected starting room.", "error")
+      self:Echo("Expected you to be in room " .. current_step[2] .. " (" .. getRoomName(current_step[2]) .. ").\n", "error")
+      self:Echo("Current room: " .. current_room_id .. " (" .. getRoomName(current_room_id) .. ").\n", "error")
       self:ResetWalking(true, "You are not in the expected starting room.")
       return
     end
 
     table.remove(self.speedwalk_path, 1)
     if not next(self.speedwalk_path) then
-      cecho("<aquamarine>You have arrived at " .. self.info.current.name .. ".\n")
+      self:Echo("You have arrived at " .. self.info.current.name .. ".", "info")
       return
     end
     self.walk_step = current_room_id
@@ -675,15 +780,15 @@ function Mapper:Step()
       local last_move = self.move_tracking[#self.move_tracking]
       if last_move then
         if current_room_id == last_move.prev_room_id then
-          cecho("<orange_red>Something prevents you from continuing.\n")
+          self:Echo("Something prevents you from continuing.", "error")
         else
-          cecho("<orange_red>You have veered off the expected path.\n")
+          self:Echo("You have veered off the expected path.", "error")
         end
       else
-        cecho("<orange_red>You have veered off the expected path.\n")
+        self:Echo("You have veered off the expected path.", "error")
       end
     else
-      cecho("<orange_red>You have veered off the expected path.\n")
+      self:Echo("You have veered off the expected path.", "error")
     end
     self:ResetWalking(true, "You have veered off the expected path.")
     return
@@ -696,7 +801,7 @@ function Mapper:Step()
 
   local full_dir = self.exits.map[dir] or self.exits.reverse[dir]
   if not full_dir then
-    cecho("<orange_red>Invalid direction.\n")
+    self:Echo("Invalid direction: " .. dir, "error")
     self:ResetWalking(true, "Invalid direction.")
     return
   end
@@ -707,6 +812,13 @@ function Mapper:Step()
   table.remove(self.speedwalk_path, 1)
 end
 
+-- ----------------------------------------------------------------------------
+-- SetSpeedwalkDelay
+--
+-- This function sets the speedwalk delay based on the provided delay value.
+-- It ensures the delay is within the minimum allowed value if not overridden.
+-- ----------------------------------------------------------------------------
+
 function Mapper:SetSpeedwalkDelay(delay, override)
   delay = tonumber(delay) or 0
   if delay < self.config.speedwalk_delay_min and not override then
@@ -715,20 +827,145 @@ function Mapper:SetSpeedwalkDelay(delay, override)
 
   self.config.speedwalk_delay = delay
 
-  if self.config.speedwalk_delay == 0.075 then
-    cecho("<aquamarine>Walk speed set to " .. self.config.speedwalk_delay .. " second per step.\n")
+  local unit = self.config.speedwalk_delay == 1 and "second" or "seconds"
+  self:Echo("Walk speed set to " .. self.config.speedwalk_delay .. " " .. unit .. " per step.", "info")
+end
+
+-- ----------------------------------------------------------------------------
+-- RememberRoom
+--
+-- This function saves the current room as a recall point for the current
+-- profile.
+-- ----------------------------------------------------------------------------
+
+function Mapper:RememberRoom(position)
+  local room_id = getPlayerRoom()
+
+  if position == nil then
+    position = #self.recalls + 1
   else
-    cecho("<aquamarine>Walk speed set to " .. self.config.speedwalk_delay .. " seconds per step.\n")
+    if position > #self.recalls then
+      position = #self.recalls + 1
+    end
+  end
+
+  local index = table.index_of(self.recalls, room_id)
+  if index then
+    self:Echo("Room " .. room_id .. " (" .. getRoomName(room_id) .. ") is already in recall position " .. index .. ".", "info")
+    return
+  end
+
+  if self.recalls[position] then
+    local existing_room_id = self.recalls[position]
+    local existing_room_name = getRoomName(existing_room_id)
+    self:Echo("Replacing room " .. existing_room_id .. " (" .. existing_room_name .. ") in recall position " .. position .. " with room " .. room_id .. " (" .. getRoomName(room_id) .. ").", "warning")
+    self.recalls[position] = room_id
+  else
+    table.insert(self.recalls, position, room_id)
+    self:Echo(
+    "Room " .. room_id .. " (" .. getRoomName(room_id) .. ") has been saved to recall position " .. position .. ".",
+      "info")
   end
 end
+
+-- ----------------------------------------------------------------------------
+-- RecallRoom
+--
+-- This function recalls the character to a previously saved room based on the
+-- provided position.
+-- ----------------------------------------------------------------------------
+
+function Mapper:RecallRoom(position)
+  if not self.recalls then
+    self:Echo("No recall points have been set.", "error")
+    return
+  end
+
+  if not self.recalls[position] then
+    self:Echo("No recall point at position " .. position .. ".", "error")
+    return
+  end
+
+  local room_id = self.recalls[position]
+  local room_name = getRoomName(room_id)
+  self:Echo("Recalling to room " .. room_id .. " (" .. room_name .. ").", "info")
+  gotoRoom(room_id)
+end
+
+-- ----------------------------------------------------------------------------
+-- DisplayRecalls
+--
+-- This function displays all the recall points for the current profile.
+-- ----------------------------------------------------------------------------
+
+function Mapper:DisplayRecalls()
+  if not self.recalls then
+    self:Echo("No recall points have been set.", "error")
+    return
+  end
+
+  self:Echo("Recall points:", "info")
+  for position, room_id in pairs(self.recalls) do
+    local room_name = getRoomName(room_id)
+    self:Echo(string.format("  %2d: %s", position, room_name), "info")
+  end
+end
+
+-- ----------------------------------------------------------------------------
+-- GetSpeedwalkDelay
+--
+-- This function returns the current speedwalk delay value.
+-- ----------------------------------------------------------------------------
 
 function Mapper:GetSpeedwalkDelay()
   return self.config.speedwalk_delay
 end
 
--- Basic event handlers
-registerNamedEventHandler(Mapper.config.name, "Mapper:Install", "sysInstall", "Mapper:Install", true)
-registerNamedEventHandler(Mapper.config.name, "Mapper:Uninstall", "sysUninstall", "Mapper:Uninstall", true)
+-- ----------------------------------------------------------------------------
+-- Helper functions
+-- ----------------------------------------------------------------------------
 
--- Finally, let's just do the setup script
-Mapper:Setup()
+function Mapper:FormatMessage(tag)
+  return string.format("<%s>(<%s>%s<%s>)<255,255,255> ",
+    table.concat(self.tags[tag][2], ","),
+    table.concat(self.tags[tag][3], ","),
+    tag,
+    table.concat(self.tags[tag][2], ",")
+  )
+end
+
+function Mapper:Echo(message, tag)
+  if tag then
+    tag = string.lower(tag)
+  end
+
+  if message[#message] ~= "\n" then
+    message = message .. "\n"
+  end
+  decho(self:FormatMessage(string.lower(self.config.name)))
+  if tag then
+    decho(self:FormatMessage(tag))
+  end
+
+  cecho(message)
+end
+
+function Mapper:TableFromPackage(gmcp_package)
+  -- Split the package string by the dots
+  local keys = self:Explode(gmcp_package, ".")
+
+  -- Start from the global gmcp table
+  local current_table = gmcp
+
+  -- Traverse through the keys to find the nested table
+  for i = 2, #keys do
+    local key = keys[i]
+    if next(current_table) then
+      current_table = current_table[key]
+    else
+      return nil -- Return nil if the key doesn't exist
+    end
+  end
+
+  return current_table
+end

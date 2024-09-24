@@ -9,15 +9,27 @@ elseif command == "fast" then
   value = 0.5
 end
 
-if command == "stop" then
+if command == "remember" then
+  if value ~= "" then
+    Mapper:RememberRoom(tonumber(value))
+  else
+    Mapper:Echo("Syntax: walk remember <recall number>", "info")
+  end
+elseif command == "recall" then
+  if value ~= "" then
+    Mapper:RecallRoom(tonumber(value))
+  else
+    Mapper:Echo("Syntax: walk recall <recall number>", "info")
+  end
+elseif command == "stop" then
   -- Stop the speedwalk
   local walking = Mapper.walking
 
   if not walking then
-    cecho("<steel_blue>You are not walking.\n")
+    Mapper:Echo("You are not walking.", "info")
   else
     Mapper:ResetWalking()
-    cecho("<steel_blue>Speedwalk stopped.\n")
+    Mapper:Echo("Speedwalk stopped.", "info")
   end
 elseif command == "speed" then
   if value ~= "" then
@@ -26,17 +38,17 @@ elseif command == "speed" then
   else
     -- Check current speed (delay)
     if Mapper.config.speedwalk_delay == 1 then
-      cecho("<steel_blue>Current walk speed is " .. Mapper.config.speedwalk_delay .. " second per step.\n")
+      Mapper:Echo("Current walk speed is " .. Mapper.config.speedwalk_delay .. " second per step.", "info")
     else
-      cecho("<steel_blue>Current walk speed is " .. Mapper.config.speedwalk_delay .. " seconds per step.\n")
+      Mapper:Echo("Current walk speed is " .. Mapper.config.speedwalk_delay .. " seconds per step.", "info")
     end
   end
 elseif command == "to" and tonumber(value) then
   local roomNumber = tonumber(value)
-  local currentRoom = Mapper.info.current.room_id
+  local currentRoom = getPlayerRoom()
 
   if currentRoom == roomNumber then
-    cecho("<orange_red>You are already there.\n")
+    Mapper:Echo("You are already there.", "info")
     return
   end
 
@@ -44,9 +56,9 @@ elseif command == "to" and tonumber(value) then
 
   -- Walk to a specific room number
   if not result then
-    cecho("<orange_red>Error: Room " .. message .. "\n")
+    Mapper:Echo("Room " .. message .. ".", "error")
   end
 else
   -- Print out the walk instructions
-  cecho("<orange_red>Syntax: walk [stop|slow|fast|speed|speed <seconds>|to <room number>]\n")
+  Mapper:Echo("Syntax: walk [stop|slow|fast|speed|speed <seconds>|to <room number>]", "info")
 end

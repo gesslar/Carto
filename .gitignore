@@ -7,3 +7,5 @@ build/
 # This utility file is specific to individual developers and should not be
 # included in the repo
 /muddle*
+
+generic_mapper.lua
