@@ -1,8 +1,8 @@
 [
   {
-        "isActive": "yes",
-        "isFolder": "no",
-        "name": "Mapper",
-        "script": ""
+    "isActive": "yes",
+    "isFolder": "no",
+    "name": "Carto",
+    "script": ""
   }
 ]

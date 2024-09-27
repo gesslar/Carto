@@ -2,26 +2,45 @@
 mudlet = mudlet or {};
 mudlet.mapper_script = true
 
----@diagnostic disable-next-line: deprecated
-table.unpack = unpack
+-- This is the name of this script, which may be different to the package name
+-- which is why we want to have a specific identifier for events that only
+-- concern this script and not the package as a whole, if it is included
+-- in other packages.
+local script_name = "Carto"
 
----@class Mapper
--- Mapper setup
-Mapper = Mapper or {
+---@class Carto
+---@field config table
+---@field default table
+---@field prefs table
+---@field walking boolean
+---@field info table
+---@field event_handlers table
+---@field glyphs table
+---@field terrain table
+---@field exits table
+---@field stubs table
+---@field vectors table
+Carto = Carto or {
   config = {
-    speedwalk_path = {},          -- Speedwalk path
-    speedwalk_delay = 0.0,        -- Speedwalk delay
-    speedwalk_delay_min = 0.0,    -- Minimum speedwalk delay
-    walk_timer = nil,             -- Walk timer
-    walk_timer_name = nil,        -- Walk timer name
-    walk_step = nil,              -- The next room id for the speedwalk
+    name = script_name,              -- Name of the script
     package_name = "__PKGNAME__", -- Name of the package
-    name = "Mapper",              -- Name of the script
-    prefix = "Mapper.",           -- Prefix for handlers
+    package_path = getMudletHomeDir() .. "/__PKGNAME__/",
+    prefix = f[[{script_name}.]],           -- Prefix for handlers
+    preferences_file = f[[{script_name}.Preferences.lua]], -- Name of the preferences file
+    speed_walk_fast = 0.5, -- Speedwalk fast delay
+    speed_walk_slow = 3.0, -- Speedwalk slow delay
+  },
+  default = {
+    speedwalk_delay = 0.0,   -- Speedwalk delay
+    speedwalk_delay_min = 0.0, -- Minimum speedwalk delay
     gmcp = {
+      -- The event that triggers the Mapper
       event = "gmcp.Room.Info",
-      expect_coordinates = true,
+      -- Whether to expect coordinates from the GMCP event
+      expect_coordinates = false,
+      -- Whether to expect a hash or vnum from the GMCP event
       expect_hash = true,
+      -- The property names we can expect from the GMCP event
       properties = {
         hash = "hash",
         vnum = "vnum",
@@ -36,7 +55,10 @@ Mapper = Mapper or {
         subtype = "subtype",
         icon = "icon",
       }
-    },
+    }
+  },
+  prefs = {
+    recalls = {}, -- Recall points for rooms
   },
   walking = false,
   info = {
@@ -109,39 +131,39 @@ Mapper = Mapper or {
       eastdown = "ed",  eastup = "eu",    northdown = "nd", northup = "nu",
       southdown = "sd", southup = "su",   westdown = "wd",  westup = "wu",
     },
-  },
-  -- Mapping of direction names to their numeric representations and vice versa
-  stubs = {
-    north = 1,        northeast = 2,      northwest = 3,      east = 4,
-    west = 5,         south = 6,          southeast = 7,      southwest = 8,
-    up = 9,           down = 10,          ["in"] = 11,        out = 12,
-    northup = 13,     southdown = 14,     southup = 15,       northdown = 16,
-    eastup = 17,      westdown = 18,      westup = 19,        eastdown = 20,
-    [1] = "north",    [2] = "northeast",  [3] = "northwest",  [4] = "east",
-    [5] = "west",     [6] = "south",      [7] = "southeast",  [8] = "southwest",
-    [9] = "up",       [10] = "down",      [11] = "in",        [12] = "out",
-    [13] = "northup", [14] = "southdown", [15] = "southup",   [16] = "northdown",
-    [17] = "eastup",  [18] = "westdown",  [19] = "westup",    [20] = "eastdown",
-  },
-  vectors = {
-    name = {
-      north     = { 0, 1, 0 },   south     = { 0, -1, 0 },
-      east      = { 1, 0, 0 },   west      = { -1, 0, 0 },
-      northwest = { -1, 1, 0 },  northeast = { 1, 1, 0 },
-      southwest = { -1, -1, 0 }, southeast = { 1, -1, 0 },
-      up        = { 0, 0, 1 },   down      = { 0, 0, -1 },
-      ["in"]    = { 0, 0, 0 },   out       = { 0, 0, 0 },
-      northup   = { 0, 1, 1 },   southdown = { 0, -1, -1 },
-      southup   = { 0, -1, 1 },  northdown = { 0, 1, -1 },
-      eastup    = { 1, 0, 1 },   westdown  = { -1, 0, -1 },
-      westup    = { -1, 0, 1 },  eastdown  = { 1, 0, -1 },
+      -- Mapping of direction names to their numeric representations and vice versa
+    stubs = {
+      north = 1,        northeast = 2,      northwest = 3,      east = 4,
+      west = 5,         south = 6,          southeast = 7,      southwest = 8,
+      up = 9,           down = 10,          ["in"] = 11,        out = 12,
+      northup = 13,     southdown = 14,     southup = 15,       northdown = 16,
+      eastup = 17,      westdown = 18,      westup = 19,        eastdown = 20,
+      [1] = "north",    [2] = "northeast",  [3] = "northwest",  [4] = "east",
+      [5] = "west",     [6] = "south",      [7] = "southeast",  [8] = "southwest",
+      [9] = "up",       [10] = "down",      [11] = "in",        [12] = "out",
+      [13] = "northup", [14] = "southdown", [15] = "southup",   [16] = "northdown",
+      [17] = "eastup",  [18] = "westdown",  [19] = "westup",    [20] = "eastdown",
     },
-    number = {
-       [1] = { 0, 1, 0 },    [2] = { 1, 1, 0 },    [3] = { -1, 1, 0 },  [4] = { 1, 0, 0 },
-       [5] = { -1, 0, 0 },   [6] = { 0, -1, 0 },   [7] = { 1, -1, 0 },  [8] = { -1, -1, 0 },
-       [9] = { 0, 0, 1 },   [10] = { 0, 0, -1 },  [11] = { 0, 0, 0 },  [12] = { 0, 0, 0 },
-      [13] = { 0, 1, 1 },   [14] = { 0, -1, -1 }, [15] = { 0, -1, 1 }, [16] = { 0, 1, -1 },
-      [17] = { 1, 0, 1 },   [18] = { -1, 0, -1 }, [19] = { -1, 0, 1 }, [20] = { 1, 0, -1 },
+    vectors = {
+      name = {
+        north     = { 0, 1, 0 },   south     = { 0, -1, 0 },
+        east      = { 1, 0, 0 },   west      = { -1, 0, 0 },
+        northwest = { -1, 1, 0 },  northeast = { 1, 1, 0 },
+        southwest = { -1, -1, 0 }, southeast = { 1, -1, 0 },
+        up        = { 0, 0, 1 },   down      = { 0, 0, -1 },
+        ["in"]    = { 0, 0, 0 },   out       = { 0, 0, 0 },
+        northup   = { 0, 1, 1 },   southdown = { 0, -1, -1 },
+        southup   = { 0, -1, 1 },  northdown = { 0, 1, -1 },
+        eastup    = { 1, 0, 1 },   westdown  = { -1, 0, -1 },
+        westup    = { -1, 0, 1 },  eastdown  = { 1, 0, -1 },
+      },
+      number = {
+        [1] = { 0, 1, 0 },    [2] = { 1, 1, 0 },    [3] = { -1, 1, 0 },  [4] = { 1, 0, 0 },
+        [5] = { -1, 0, 0 },   [6] = { 0, -1, 0 },   [7] = { 1, -1, 0 },  [8] = { -1, -1, 0 },
+        [9] = { 0, 0, 1 },   [10] = { 0, 0, -1 },  [11] = { 0, 0, 0 },  [12] = { 0, 0, 0 },
+        [13] = { 0, 1, 1 },   [14] = { 0, -1, -1 }, [15] = { 0, -1, 1 }, [16] = { 0, 1, -1 },
+        [17] = { 1, 0, 1 },   [18] = { -1, 0, -1 }, [19] = { -1, 0, 1 }, [20] = { 1, 0, -1 },
+      }
     }
   },
   tags = {
@@ -150,62 +172,106 @@ Mapper = Mapper or {
     error = { "%s", table.deepcopy(color_table["red"]), table.deepcopy(color_table["orange_red"]) },
     info = { "%s", table.deepcopy(color_table["chartreuse"]), table.deepcopy(color_table["olive_drab"]) },
   },
-  move_tracking = {}, -- Move tracking for room movements
-  recalls = {}, -- Recall points for rooms
+  speedwalk_path = {},     -- Speedwalk path
+  move_tracking = {},      -- Move tracking for room movements
+  walk_timer = nil,        -- Walk timer
+  walk_timer_name = nil,   -- Walk timer name
+  walk_step = nil,         -- The next room id for the speedwalk
 }
 
 -- ----------------------------------------------------------------------------
--- Event Handlers
+-- Preferences
 -- ----------------------------------------------------------------------------
+function Carto:LoadPreferences()
+  local path = self.config.package_path .. self.config.preferences_file
+  local defaults = self.default
 
-Mapper.default_event_handlers = Mapper.default_event_handlers or {
-  -- System events that we want to handle
-  "sysConnectionEvent",
-  "sysExitEvent",
-  "sysLoadEvent",
-  -- GMCP events that we want to handle
-  Mapper.config.gmcp.event
-}
-
-function Mapper:EventHandler(event, ...)
-  if event == "sysLoadEvent" then
-    self:Setup()               -- no args
-  elseif event == "sysConnectionEvent" then
-    self:Setup()               -- no args
-  elseif event == "sysExitEvent" then
-    self:Teardown()            -- no args
-  elseif event == self.config.gmcp.event then
-    self:Move(...)            -- arg1 is the GMCP package name
+  if io.exists(path) then
+    local prefs = {}
+    table.load(path, prefs)
+    prefs = table.update(defaults, prefs)
+    self.prefs = prefs
+  else
+    self.prefs = defaults
   end
+  if not self.prefs.speedwalk_delay then
+    self.prefs.speedwalk_delay = self.default.speedwalk_delay
+  end
+  if not self.prefs.speedwalk_delay_min then
+    self.prefs.speedwalk_delay_min = self.default.speedwalk_delay_min
+  end
+  if not self.prefs.gmcp then
+    self.prefs.gmcp = self.default.gmcp
+  end
+
+  if not self.prefs.recalls then
+    self.prefs.recalls = {}
+  end
+  self.prefs = self.default
+  self.prefs.recalls = {}
 end
 
--- Basic event handlers
-registerNamedEventHandler(Mapper.config.name, "Mapper:Install", "sysInstall", "Mapper:Install", true)
-registerNamedEventHandler(Mapper.config.name, "Mapper:Uninstall", "sysUninstall", "Mapper:Uninstall", true)
+function Carto:SavePreferences()
+  local path = self.config.package_path .. self.config.preferences_file
+  table.save(path, self.prefs)
+end
+
+function Carto:SetPreference(key, value)
+  if not self.prefs then
+    self.prefs = {}
+  end
+
+  if not self.default[key] then
+    cecho("Unknown preference " .. key .. "\n")
+    return
+  end
+
+  if key == "speedwalk_delay" then
+    value = tonumber(value)
+  elseif key == "speedwalk_delay_min" then
+    value = tonumber(value)
+  else
+    cecho("Unknown preference " .. key .. "\n")
+    return
+  end
+
+  self.prefs[key] = value
+  self:SavePreferences()
+  self:LoadPreferences()
+
+  cecho("Preference " .. key .. " set to " .. value .. ".\n")
+end
+
 
 -- ----------------------------------------------------------------------------
 -- Setup and Teardown
 -- ----------------------------------------------------------------------------
 
-function Mapper:Setup()
+---@param event string
+---@param package string
+function Carto:Setup(event, package)
+  if package and package ~= self.config.package_name then
+    return
+  end
+
+  if not table.index_of(getPackages(), "Helper") then
+    cecho(f"<gold><b>{self.config.name} is installing dependent <b>Helper</b> package.\n")
+    installPackage(
+      "https://github.com/gesslar/Helper/releases/latest/download/Helper.mpackage"
+    )
+  end
+
+  self:LoadPreferences()
+
   -- Set custom environment colors for terrain types
   for _, data in pairs(self.terrain.types) do
-    local r, g, b = table.unpack(data.color)
+    ---@diagnostic disable-next-line: deprecated
+    local r, g, b = unpack(data.color)
     setCustomEnvColor(data.id, r, g, b, 255)
   end
 
   -- Register event handlers
   local handler
-
-  -- Register persistent event handlers
-  for _, event in ipairs(self.default_event_handlers) do
-    handler = self.config.prefix .. event
-    if registerNamedEventHandler(self.config.name, handler, event, function(...) self:EventHandler(...) end) then
-      table.insert(self.event_handlers, handler)
-    else
-      self:Echo("Failed to register event handler for " .. event, "error")
-    end
-  end
 
   self.walk_timer_name = self.config.prefix .. "walk_timer"
 
@@ -217,17 +283,94 @@ function Mapper:Setup()
     end
   end
 
+  -- We need to add the gmcp one now based on the preferences
+  if self.prefs.gmcp.event then
+    registerNamedEventHandler(self.config.name, self.prefs.gmcp.event, self.prefs.gmcp.event, function(...) self:EventHandler(...) end)
+  end
+
   gmod.enableModule(self.config.name, "Room")
+
+  if event == "sysInstall" then
+    tempTimer(1, function()
+      echo("\n")
+      cecho("<" .. self.help_styles.h1 .. ">Welcome to <b>" .. self.config.name .. "</b>!<reset>\n")
+      echo("\n")
+      helper.print({
+        text = self.help.topics.usage,
+        styles = self.help_styles
+      })
+    end)
+  end
 end
 
-function Mapper:Teardown()
+---@param event string
+---@param ... any
+function Carto:Teardown(event, ...)
   -- Kill event handlers
   deleteAllNamedEventHandlers(self.config.name)
-  self.event_handlers = {}
   self:ResetWalking(false, "Script has been disabled.")
 end
 
-function Mapper:Explode(str, delimiter)
+-- ----------------------------------------------------------------------------
+-- Event Handlers
+-- ----------------------------------------------------------------------------
+
+function Carto:SetupEventHandlers()
+  self.event_handlers = {
+    -- System events that we want to handle
+    "sysLoadEvent",
+    "sysConnectionEvent",
+    "sysUninstall",
+    "sysDisconnectionEvent",
+    "sysExitEvent",
+  }
+
+  local registered_handlers = getNamedEventHandlers(self.config.name) or {}
+  -- Register persistent event handlers
+  for _, event in ipairs(self.event_handlers) do
+    local handler = self.config.name .. "." .. event
+    if not registered_handlers[handler] then
+      local result, err = registerNamedEventHandler(self.config.name, handler, event,
+        function(...) self:EventHandler(...) end)
+      if not result then
+        cecho("<orange_red>Failed to register event handler for " .. event .. "\n")
+      end
+    end
+  end
+end
+
+-- GMCP events that we want to handle
+---@param event string
+---@param ... any
+function Carto:EventHandler(event, ...)
+  if event == "sysInstall" then
+    self:Install(event, ...)
+  elseif event == "sysLoadEvent" or event == "sysConnectionEvent" then
+    self:Setup(event, ...)
+  elseif event == "sysDisconnectionEvent" then
+    self:Disconnect(event, ...) -- no args
+  elseif event == "sysExitEvent" then
+    self:Teardown(event, ...)   -- no args
+  elseif event == self.prefs.gmcp.event then
+    self:Move(event, ...)       -- arg1 is the GMCP package name
+  end
+end
+
+
+-- sysInstall must be on its own, outside of the event_handlers
+-- since it will be called during the install process.
+registerNamedEventHandler(Carto.config.name, "Mapper:Install", "sysInstall", function(...) Carto:EventHandler(...) end,
+  true)
+Carto:SetupEventHandlers()
+
+-- ----------------------------------------------------------------------------
+-- Utility Functions
+-- ----------------------------------------------------------------------------
+
+---@param str string
+---@param delimiter string
+---@return table
+function Carto:Explode(str, delimiter)
   local result = {}
   local pattern = "([^" .. delimiter .. "]+)" -- This pattern correctly matches non-delimiter characters
 
@@ -238,45 +381,52 @@ function Mapper:Explode(str, delimiter)
   return result
 end
 
+---@param event string
+---@param ... any
+function Carto:Disconnect(event, ...)
+  self:ResetWalking(true, "Disconnected from the mud.")
+end
+
 -- ----------------------------------------------------------------------------
 -- Install/Uninstall
 -- ----------------------------------------------------------------------------
 
-function Mapper:Install(event, package)
+---@param event string
+---@param package string
+function Carto:Install(event, package)
   if package ~= self.config.package_name then
     return
   end
 
-  self:Setup()
-
   if table.contains(getPackages(), "generic_mapper") then
-    self:Echo("Uninstalling package: generic_mapper")
-    uninstallPackage("generic_mapper")
+    echo("Uninstalling package: generic_mapper\n")
+    -- uninstallPackage("generic_mapper")
     if(table.contains(getPackages(), "generic_mapper")) then
-      self:Echo("Could not uninstall generic_mapper.", "warning")
-      self:Echo("Please uninstall it manually and restart Mudlet.", "warning")
+      echo("Could not uninstall generic_mapper.\n")
+      echo("Please uninstall it manually and restart Mudlet.\n")
       return
     end
   end
 
   deleteNamedEventHandler(self.config.name, "Mapper:Install")
 
-  self:Echo(self.config.name .. " installed.")
-  self:Setup()
+  self:Setup(event, package)
 end
 
-function Mapper:Uninstall(event, package)
+---@param event string
+---@param package string
+function Carto:Uninstall(event, package)
   if package ~= self.config.package_name then
     return
   end
 
   if self.walking then
-    self:Echo("Resetting walking.")
+    echo("Resetting walking.\n")
   end
   self:ResetWalking(true, "Script has been uninstalled.")
-  self:Teardown()
+  self:Teardown(event, package)
 
-  self:Echo(self.config.name .. " uninstalled.")
+  echo(self.config.name .. " uninstalled.\n")
 end
 
 -- ----------------------------------------------------------------------------
@@ -290,35 +440,36 @@ end
 -- updates the exits.
 -- ----------------------------------------------------------------------------
 
-function Mapper:Move(gmcp_package)
+---@param gmcp_package string
+function Carto:Move(event, gmcp_package)
   local gmcp_table = self:TableFromPackage(gmcp_package) or {}
 
   self.info.previous = self.info.current
 
-  if self.config.gmcp.expect_hash then
-    if not gmcp_table[self.config.gmcp.properties.hash] then return end
+  if self.prefs.gmcp.expect_hash then
+    if not gmcp_table[self.prefs.gmcp.properties.hash] then return end
   else
-    if not gmcp_table[self.config.gmcp.properties.vnum] then return end
+    if not gmcp_table[self.prefs.gmcp.properties.vnum] then return end
   end
 
   self.info.current = {
-    hash = gmcp_table[self.config.gmcp.properties.hash],
-    area = gmcp_table[self.config.gmcp.properties.area],
-    name = gmcp_table[self.config.gmcp.properties.name],
-    environment = gmcp_table[self.config.gmcp.properties.environment],
-    symbol = gmcp_table[self.config.gmcp.properties.symbol],
-    exits = table.deepcopy(gmcp_table[self.config.gmcp.properties.exits]),
-    doors = table.deepcopy(gmcp_table[self.config.gmcp.properties.doors]),
-    type = gmcp_table[self.config.gmcp.properties.type],
-    subtype = gmcp_table[self.config.gmcp.properties.subtype],
-    icon = gmcp_table[self.config.gmcp.properties.icon],
+    hash = gmcp_table[self.prefs.gmcp.properties.hash],
+    area = gmcp_table[self.prefs.gmcp.properties.area],
+    name = gmcp_table[self.prefs.gmcp.properties.name],
+    environment = gmcp_table[self.prefs.gmcp.properties.environment],
+    symbol = gmcp_table[self.prefs.gmcp.properties.symbol],
+    exits = table.deepcopy(gmcp_table[self.prefs.gmcp.properties.exits]),
+    doors = table.deepcopy(gmcp_table[self.prefs.gmcp.properties.doors]),
+    type = gmcp_table[self.prefs.gmcp.properties.type],
+    subtype = gmcp_table[self.prefs.gmcp.properties.subtype],
+    icon = gmcp_table[self.prefs.gmcp.properties.icon],
   }
 
-  self.info.current.custom = gmcp_table[self.config.gmcp.properties.custom] or {}
+  self.info.current.custom = gmcp_table[self.prefs.gmcp.properties.custom] or {}
 
-  if self.config.gmcp.expect_coordinates then
-    if gmcp_table[self.config.gmcp.properties.coords] then
-      self.info.current.coords = gmcp_table[self.config.gmcp.properties.coords]
+  if self.prefs.gmcp.expect_coordinates then
+    if gmcp_table[self.prefs.gmcp.properties.coords] then
+      self.info.current.coords = gmcp_table[self.prefs.gmcp.properties.coords]
     else
       if gmcp_table.x and gmcp_table.y and gmcp_table.z then
         self.info.current.coords = { gmcp_table.x, gmcp_table.y, gmcp_table.z }
@@ -332,7 +483,7 @@ function Mapper:Move(gmcp_package)
 
   local room_id = self:AddOrUpdateRoom(self.info.current)
   if room_id == -1 then
-    self:Echo("Failed to add room.", "error")
+    echo("Failed to add room.\n")
     return
   end
 
@@ -386,10 +537,11 @@ end
 -- information. It handles both hash and vnum-based room identification.
 -- ----------------------------------------------------------------------------
 
-function Mapper:AddOrUpdateRoom(info)
+---@param info table
+function Carto:AddOrUpdateRoom(info)
   local room_id
 
-  if self.config.gmcp.expect_hash then
+  if self.prefs.gmcp.expect_hash then
     room_id = getRoomIDbyHash(info.hash)
     if room_id == -1 then
       room_id = createRoomID()
@@ -441,7 +593,7 @@ function Mapper:AddOrUpdateRoom(info)
 
   -- Update room coordinates if they have changed, otherwise calculate them
   local coords = {}
-  if self.config.gmcp.expect_coordinates then
+  if self.prefs.gmcp.expect_coordinates then
     if info.coords then
       coords = info.coords
     end
@@ -451,12 +603,13 @@ function Mapper:AddOrUpdateRoom(info)
   end
 
   if #coords == 3 then
-    local x, y, z = table.unpack(coords)
+    ---@diagnostic disable-next-line: deprecated
+    local x, y, z = unpack(coords)
     setRoomCoordinates(room_id, x, y, z)
   end
 
   local env_id
-  if info[self.config.gmcp.properties.environment] then
+  if info[self.prefs.gmcp.properties.environment] then
     if self.terrain.types[info.environment] then
       env_id = self.terrain.types[info.environment].id
     else
@@ -503,7 +656,7 @@ end
 -- room and the shift vectors. It returns the coordinates of the current room.
 -- ----------------------------------------------------------------------------
 
-function Mapper:CalculateCoordinates(roomID)
+function Carto:CalculateCoordinates()
   local default_coordinates = { 0, 0, 0 }
 
   if not self.info.previous or not self.info.previous.room_id then
@@ -521,19 +674,19 @@ function Mapper:CalculateCoordinates(roomID)
 
   local shift = { 0, 0, 0 }
   local compare_field
-  if self.config.gmcp.expect_hash then
-    compare_field = self.config.gmcp.properties.hash
+  if self.prefs.gmcp.expect_hash then
+    compare_field = self.prefs.gmcp.properties.hash
   else
-    compare_field = self.config.gmcp.properties.vnum
+    compare_field = self.prefs.gmcp.properties.vnum
   end
 
-  for k, v in pairs(self.info.current[self.config.gmcp.properties.exits]) do
-    if v == self.info.previous[compare_field] and self.vectors.name[k] then
-      if self.vectors.name[k] then
-        shift = self.vectors.name[k]
+  for k, v in pairs(self.info.current[self.prefs.gmcp.properties.exits]) do
+    if v == self.info.previous[compare_field] and self.exits.vectors.name[k] then
+      if self.exits.vectors.name[k] then
+        shift = self.exits.vectors.name[k]
         break
       else
-        self:Echo("No shift vector found for " .. k .. ".", "warning")
+        echo("No shift vector found for " .. k .. ".\n")
       end
     end
   end
@@ -542,10 +695,16 @@ function Mapper:CalculateCoordinates(roomID)
     coords[n] = coords[n] - shift[n]
   end
 
+  -- Print out all of the information we know
+  echo("Previous room: " .. self.info.previous.name .. " (" .. self.info.previous.hash .. ")\n")
+  echo("Previous room coordinates: " .. tostring(getRoomCoordinates(self.info.previous.room_id)) .. "\n")
+  echo("Current room: " .. self.info.current.name .. " (" .. self.info.current.hash .. ")\n")
+  echo("Calculated coordinates: " .. table.concat(coords, ", ") .. "\n")
   return coords
 end
 
-function Mapper:UpdateExits(room_id)
+---@param room_id number
+function Carto:UpdateExits(room_id)
   local prev = self.info.previous or {}
   local current = self.info.current or {}
 
@@ -563,7 +722,7 @@ function Mapper:UpdateExits(room_id)
   for dir, id in pairs(current.exits) do
     local exit_room_id
 
-    if self.config.gmcp.expect_hash then
+    if self.prefs.gmcp.expect_hash then
       exit_room_id = getRoomIDbyHash(id)
     else
       local tmp = getRoomName(id)
@@ -577,7 +736,7 @@ function Mapper:UpdateExits(room_id)
     -- This exit leads to a room we've seen before
     if exit_room_id ~= -1 then
       -- Neither exit nor stub exists, set exit
-      local stub_num = self.stubs[dir]
+      local stub_num = self.exits.stubs[dir]
       if stub_num then
         if not current_exits[dir] and not current_stubs[stub_num] then
           setExitStub(room_id, dir, true)
@@ -589,7 +748,7 @@ function Mapper:UpdateExits(room_id)
       end
     else
       -- This is an unexplored exit
-      if not table.contains(current_stubs, self.stubs[dir]) then
+      if not table.contains(current_stubs, self.exits.stubs[dir]) then
         setExitStub(room_id, dir, true)
       end
     end
@@ -614,7 +773,7 @@ end
 -- ----------------------------------------------------------------------------
 
 function doSpeedWalk()
-  Mapper:Speedwalk()
+  Carto:Speedwalk()
 end
 
 -- ----------------------------------------------------------------------------
@@ -624,9 +783,19 @@ end
 -- process is interrupted or completed.
 -- ----------------------------------------------------------------------------
 
-function Mapper:ResetWalking(exception, reason)
+---@param exception boolean
+---@param reason string
+function Carto:ResetWalking(exception, reason)
   if table.contains(getNamedTimers(self.config.name), self.walk_timer_name) then
     deleteNamedTimer(self.config.name, self.walk_timer_name)
+  end
+
+  if self.walking then
+    if exception then
+      raiseEvent("onSpeedwalkReset", exception, reason)
+    else
+      raiseEvent("sysSpeedwalkFinished")
+    end
   end
 
   self.walking = false
@@ -634,12 +803,6 @@ function Mapper:ResetWalking(exception, reason)
   self.walk_timer = nil
   self.walk_step = nil
   self.move_tracking = {}
-
-  if exception then
-    raiseEvent("onSpeedwalkReset", exception, reason)
-  else
-    raiseEvent("sysSpeedwalkFinished")
-  end
 end
 
 -- ----------------------------------------------------------------------------
@@ -649,31 +812,31 @@ end
 -- conditions and initiates the walking process if all checks pass.
 -- ----------------------------------------------------------------------------
 
-function Mapper:Speedwalk()
+function Carto:Speedwalk()
   if not self.info then
-    self:Echo("You are not in a room.", "error")
+    echo(string.format("%s cannot determine your current room.\n", self.config.name))
     return
   end
 
   if not self.info.current then
-    self:Echo("You are not in a room.", "error")
+    echo(string.format("%s cannot determine your current room.\n", self.config.name))
     return
   end
 
   if self.walking then
-    self:Echo("You are already walking!", "error")
+    echo("You are already walking!\n")
     return
   end
 
   self.speedwalk_path = {}
   if not next(self.info.current.exits) then
-    self:Echo("No speedwalk direction found.", "error")
+    echo("No speedwalk direction found.\n")
     self:ResetWalking(true, "No speedwalk direction found.")
     return
   end
 
   if not next(speedWalkPath) then
-    self:Echo("No speedwalk path found.", "error")
+    echo("No speedwalk path found.\n")
     self:ResetWalking(true, "No speedwalk path found.")
     return
   end
@@ -688,7 +851,7 @@ function Mapper:Speedwalk()
   -- Inserts {nil, room_id} at the beginning of the path
   local room_exits = getRoomExits(self.info.current.room_id) or {}
   if not next(room_exits) then
-    self:Echo("No exits found.", "error")
+    echo("No exits found.\n")
     self:ResetWalking(true, "No exits found.")
     return
   end
@@ -706,13 +869,13 @@ function Mapper:Speedwalk()
   self.walk_timer = registerNamedTimer(
     self.config.name,
     self.walk_timer_name,
-    self.config.speedwalk_delay + 0.01,
+    self.prefs.speedwalk_delay + 0.01,
     function() self:Step() end,
     false
   )
 
   if not self.walk_timer then
-    self:Echo("Failed to start walking.", "error")
+    echo("Failed to start walking.\n")
     self:ResetWalking(true, "Failed to start walking.")
     return
   end
@@ -720,7 +883,7 @@ function Mapper:Speedwalk()
   self.walking = true
   local destination_id = self.speedwalk_path[#self.speedwalk_path][2]
   local destination_name = getRoomName(destination_id)
-  self:Echo("Walking to " .. destination_name .. ".", "info")
+  echo("Walking to " .. destination_name .. ".\n")
 
   raiseEvent("sysSpeedwalkStarted")
 end
@@ -737,16 +900,16 @@ end
 -- it will be called again.
 -- ----------------------------------------------------------------------------
 
-function Mapper:Step()
+function Carto:Step()
   if not next(self.speedwalk_path) then
-    self:Echo("You have arrived at " .. self.info.current.name .. ".", "info")
+    echo("You have arrived at " .. self.info.current.name .. ".\n")
     self:ResetWalking(false, "Arrived at destination.")
     return
   end
 
   local current_room_id = self.info.current.room_id
   if not current_room_id then
-    self:Echo("Unable to determine your current location.", "error")
+    echo("Unable to determine your current location.\n")
     self:ResetWalking(true, "Unable to determine your current location.")
     return
   end
@@ -756,16 +919,16 @@ function Mapper:Step()
   -- Check if this is the starting room (which doesn't have a direction)
   if current_step[1] == "" then
     if current_room_id ~= current_step[2] then
-      self:Echo("You are not in the expected starting room.", "error")
-      self:Echo("Expected you to be in room " .. current_step[2] .. " (" .. getRoomName(current_step[2]) .. ").\n", "error")
-      self:Echo("Current room: " .. current_room_id .. " (" .. getRoomName(current_room_id) .. ").\n", "error")
+      echo("You are not in the expected starting room.\n")
+      echo("Expected you to be in room " .. current_step[2] .. " (" .. getRoomName(current_step[2]) .. ").\n")
+      echo("Current room: " .. current_room_id .. " (" .. getRoomName(current_room_id) .. ").\n")
       self:ResetWalking(true, "You are not in the expected starting room.")
       return
     end
 
     table.remove(self.speedwalk_path, 1)
     if not next(self.speedwalk_path) then
-      self:Echo("You have arrived at " .. self.info.current.name .. ".", "info")
+      echo("You have arrived at " .. self.info.current.name .. ".\n")
       return
     end
     self.walk_step = current_room_id
@@ -780,28 +943,29 @@ function Mapper:Step()
       local last_move = self.move_tracking[#self.move_tracking]
       if last_move then
         if current_room_id == last_move.prev_room_id then
-          self:Echo("Something prevents you from continuing.", "error")
+          echo("Something prevents you from continuing.\n")
         else
-          self:Echo("You have veered off the expected path.", "error")
+          echo("You have veered off the expected path.\n")
         end
       else
-        self:Echo("You have veered off the expected path.", "error")
+        echo("You have veered off the expected path.\n")
       end
     else
-      self:Echo("You have veered off the expected path.", "error")
+      echo("You have veered off the expected path.\n")
     end
     self:ResetWalking(true, "You have veered off the expected path.")
     return
   end
 
   -- Now we're dealing with a regular step
-  local dir, next_room_id = table.unpack(current_step)
+  ---@diagnostic disable-next-line: deprecated
+  local dir, next_room_id = unpack(current_step)
 
   self.walk_step = next_room_id
 
   local full_dir = self.exits.map[dir] or self.exits.reverse[dir]
   if not full_dir then
-    self:Echo("Invalid direction: " .. dir, "error")
+    echo("Invalid direction: " .. dir .. "\n")
     self:ResetWalking(true, "Invalid direction.")
     return
   end
@@ -819,16 +983,18 @@ end
 -- It ensures the delay is within the minimum allowed value if not overridden.
 -- ----------------------------------------------------------------------------
 
-function Mapper:SetSpeedwalkDelay(delay, override)
+---@param delay number
+---@param override boolean
+function Carto:SetSpeedwalkDelay(delay, override)
   delay = tonumber(delay) or 0
-  if delay < self.config.speedwalk_delay_min and not override then
-    delay = self.config.speedwalk_delay_min
+  if delay < self.prefs.speedwalk_delay_min and not override then
+    delay = self.prefs.speedwalk_delay_min
   end
 
-  self.config.speedwalk_delay = delay
+  self.prefs.speedwalk_delay = delay
 
-  local unit = self.config.speedwalk_delay == 1 and "second" or "seconds"
-  self:Echo("Walk speed set to " .. self.config.speedwalk_delay .. " " .. unit .. " per step.", "info")
+  local unit = self.prefs.speedwalk_delay == 1 and "second" or "seconds"
+  echo("Walk speed set to " .. self.prefs.speedwalk_delay .. " " .. unit .. " per step.\n")
 end
 
 -- ----------------------------------------------------------------------------
@@ -838,34 +1004,68 @@ end
 -- profile.
 -- ----------------------------------------------------------------------------
 
-function Mapper:RememberRoom(position)
+---@param position number
+function Carto:RememberRoom(position)
   local room_id = getPlayerRoom()
 
   if position == nil then
-    position = #self.recalls + 1
+    position = #self.prefs.recalls + 1
   else
-    if position > #self.recalls then
-      position = #self.recalls + 1
+    if position > #self.prefs.recalls then
+      position = #self.prefs.recalls + 1
     end
   end
 
-  local index = table.index_of(self.recalls, room_id)
+  local index = table.index_of(self.prefs.recalls, room_id)
   if index then
-    self:Echo("Room " .. room_id .. " (" .. getRoomName(room_id) .. ") is already in recall position " .. index .. ".", "info")
+    echo("Room " .. room_id .. " (" .. getRoomName(room_id) .. ") is already in recall position " .. index .. ".\n")
     return
   end
 
-  if self.recalls[position] then
-    local existing_room_id = self.recalls[position]
+  if self.prefs.recalls[position] then
+    local existing_room_id = self.prefs.recalls[position]
     local existing_room_name = getRoomName(existing_room_id)
-    self:Echo("Replacing room " .. existing_room_id .. " (" .. existing_room_name .. ") in recall position " .. position .. " with room " .. room_id .. " (" .. getRoomName(room_id) .. ").", "warning")
-    self.recalls[position] = room_id
+    echo("Replacing room " .. existing_room_id .. " (" .. existing_room_name .. ") in recall position " .. position .. " with room " .. room_id .. " (" .. getRoomName(room_id) .. ").\n")
+    self.prefs.recalls[position] = room_id
   else
-    table.insert(self.recalls, position, room_id)
-    self:Echo(
-    "Room " .. room_id .. " (" .. getRoomName(room_id) .. ") has been saved to recall position " .. position .. ".",
-      "info")
+    table.insert(self.prefs.recalls, position, room_id)
+    echo("Room " .. room_id .. " (" .. getRoomName(room_id) .. ") has been saved to recall position " .. position .. ".\n")
   end
+
+  self:SavePreferences()
+end
+
+-- ----------------------------------------------------------------------------
+-- ForgetRoom
+--
+-- This function removes a recall point from the list of recalls.
+-- ----------------------------------------------------------------------------
+
+---@param position number
+function Carto:ForgetRoom(position)
+  if not self.prefs.recalls then
+    echo("No recall points have been set.\n")
+    return
+  end
+
+  if position == nil then
+    local room_id = getPlayerRoom()
+    position = table.index_of(self.prefs.recalls, room_id)
+    if not position then
+      echo("You are not in a recall point.\n")
+      return
+    end
+  end
+
+  if not self.prefs.recalls[position] then
+    echo("No recall point at position " .. position .. ".\n")
+    return
+  end
+
+  echo("Forgetting room " .. self.prefs.recalls[position] .. " (" .. getRoomName(self.prefs.recalls[position]) .. ") at position " .. position .. ".\n")
+  table.remove(self.prefs.recalls, position)
+
+  self:SavePreferences()
 end
 
 -- ----------------------------------------------------------------------------
@@ -875,20 +1075,21 @@ end
 -- provided position.
 -- ----------------------------------------------------------------------------
 
-function Mapper:RecallRoom(position)
-  if not self.recalls then
-    self:Echo("No recall points have been set.", "error")
+---@param position number
+function Carto:RecallRoom(position)
+  if #self.prefs.recalls < 1 then
+    echo("No recall points have been set.\n")
     return
   end
 
-  if not self.recalls[position] then
-    self:Echo("No recall point at position " .. position .. ".", "error")
+  if not self.prefs.recalls[position] then
+    echo("No recall point at position " .. position .. ".\n")
     return
   end
 
-  local room_id = self.recalls[position]
+  local room_id = self.prefs.recalls[position]
   local room_name = getRoomName(room_id)
-  self:Echo("Recalling to room " .. room_id .. " (" .. room_name .. ").", "info")
+  echo("Recalling to room " .. room_id .. " (" .. room_name .. ").\n")
   gotoRoom(room_id)
 end
 
@@ -898,16 +1099,16 @@ end
 -- This function displays all the recall points for the current profile.
 -- ----------------------------------------------------------------------------
 
-function Mapper:DisplayRecalls()
-  if not self.recalls then
-    self:Echo("No recall points have been set.", "error")
+function Carto:DisplayRecalls()
+  if #self.prefs.recalls < 1 then
+    echo("No recall points have been set.\n")
     return
   end
 
-  self:Echo("Recall points:", "info")
-  for position, room_id in pairs(self.recalls) do
+  echo("Recall points:\n")
+  for position, room_id in pairs(self.prefs.recalls) do
     local room_name = getRoomName(room_id)
-    self:Echo(string.format("  %2d: %s", position, room_name), "info")
+    echo(string.format("  %2d: %s\n", position, room_name))
   end
 end
 
@@ -917,40 +1118,16 @@ end
 -- This function returns the current speedwalk delay value.
 -- ----------------------------------------------------------------------------
 
-function Mapper:GetSpeedwalkDelay()
-  return self.config.speedwalk_delay
+function Carto:GetSpeedwalkDelay()
+  return self.prefs.speedwalk_delay
 end
 
 -- ----------------------------------------------------------------------------
 -- Helper functions
 -- ----------------------------------------------------------------------------
 
-function Mapper:FormatMessage(tag)
-  return string.format("<%s>(<%s>%s<%s>)<255,255,255> ",
-    table.concat(self.tags[tag][2], ","),
-    table.concat(self.tags[tag][3], ","),
-    tag,
-    table.concat(self.tags[tag][2], ",")
-  )
-end
-
-function Mapper:Echo(message, tag)
-  if tag then
-    tag = string.lower(tag)
-  end
-
-  if message[#message] ~= "\n" then
-    message = message .. "\n"
-  end
-  decho(self:FormatMessage(string.lower(self.config.name)))
-  if tag then
-    decho(self:FormatMessage(tag))
-  end
-
-  cecho(message)
-end
-
-function Mapper:TableFromPackage(gmcp_package)
+---@param gmcp_package string
+function Carto:TableFromPackage(gmcp_package)
   -- Split the package string by the dots
   local keys = self:Explode(gmcp_package, ".")
 
@@ -969,3 +1146,36 @@ function Mapper:TableFromPackage(gmcp_package)
 
   return current_table
 end
+
+-- ----------------------------------------------------------------------------
+-- Help
+-- ----------------------------------------------------------------------------
+
+Carto.help_styles = {
+  h1 = "hot_pink",
+}
+
+Carto.help = {
+  name = Carto.config.name,
+  topics = {
+    usage = f [[
+<h1><u>{Carto.config.name}</u></h1>
+
+Syntax: <b>walk</b> [<b>command</b>]
+
+  <b>walk</b> - See this help text.
+  <b>walk stop</b> - Stop walking.
+  <b>walk slow</b> - Set walk speed to {Carto.config.speed_walk_slow} seconds per step.
+  <b>walk fast</b> - Set walk speed to {Carto.config.speed_walk_fast} seconds per step.
+  <b>walk speed</b> - See your current walk speed.
+  <b>walk speed</b> <<b>n</b>> - Set walk speed to <i>n</i> seconds per step.
+  <b>walk to</b> <<b>room_id</b>> - Walk to room <i>room_id</i>.
+  <b>walk remember</b> - Remember the current room.
+  <b>walk remember</b> <<b>position</b>> - Remember the current room at <i>position</i>.
+  <b>walk forget</b> - Forget the current room.
+  <b>walk forget</b> <<b>position</b>> - Forget the room at <i>position</i>.
+  <b>walk recall</b> - List all recall positions.
+  <b>walk recall</b> <<b>position</b>> - Recall to the room at <i>position</i>.
+]],
+  }
+}

@@ -10,37 +10,35 @@ elseif command == "fast" then
 end
 
 if command == "remember" then
-  if value ~= "" then
-    Mapper:RememberRoom(tonumber(value))
-  else
-    Mapper:Echo("Syntax: walk remember <recall number>", "info")
-  end
+  Carto:RememberRoom(value and tonumber(value) or nil)
+elseif command == "forget" then
+  Carto:ForgetRoom(value and tonumber(value) or nil)
 elseif command == "recall" then
   if value ~= "" then
-    Mapper:RecallRoom(tonumber(value))
+    Carto:RecallRoom(tonumber(value))
   else
-    Mapper:Echo("Syntax: walk recall <recall number>", "info")
+    Carto:DisplayRecalls()
   end
 elseif command == "stop" then
   -- Stop the speedwalk
-  local walking = Mapper.walking
+  local walking = Carto.walking
 
   if not walking then
-    Mapper:Echo("You are not walking.", "info")
+    echo("You are not walking.\n")
   else
-    Mapper:ResetWalking()
-    Mapper:Echo("Speedwalk stopped.", "info")
+    Carto:ResetWalking()
+    echo("Speedwalk stopped.\n")
   end
 elseif command == "speed" then
   if value ~= "" then
     -- Set new speed (delay)
-    Mapper:SetSpeedwalkDelay(value)
+    Carto:SetSpeedwalkDelay(value, false)
   else
     -- Check current speed (delay)
-    if Mapper.config.speedwalk_delay == 1 then
-      Mapper:Echo("Current walk speed is " .. Mapper.config.speedwalk_delay .. " second per step.", "info")
+    if Carto.prefs.speedwalk_delay == 1 then
+      echo("Current walk speed is " .. Carto.prefs.speedwalk_delay .. " second per step.\n")
     else
-      Mapper:Echo("Current walk speed is " .. Mapper.config.speedwalk_delay .. " seconds per step.", "info")
+      echo("Current walk speed is " .. Carto.prefs.speedwalk_delay .. " seconds per step.\n")
     end
   end
 elseif command == "to" and tonumber(value) then
@@ -48,7 +46,7 @@ elseif command == "to" and tonumber(value) then
   local currentRoom = getPlayerRoom()
 
   if currentRoom == roomNumber then
-    Mapper:Echo("You are already there.", "info")
+    echo("You are already there.\n")
     return
   end
 
@@ -56,9 +54,9 @@ elseif command == "to" and tonumber(value) then
 
   -- Walk to a specific room number
   if not result then
-    Mapper:Echo("Room " .. message .. ".", "error")
+    echo("Room " .. message .. ".\n")
   end
 else
   -- Print out the walk instructions
-  Mapper:Echo("Syntax: walk [stop|slow|fast|speed|speed <seconds>|to <room number>]", "info")
+  helper.print({text = Carto.help.topics.usage, styles = Carto.help_styles})
 end
