@@ -695,11 +695,6 @@ function Carto:CalculateCoordinates()
     coords[n] = coords[n] - shift[n]
   end
 
-  -- Print out all of the information we know
-  echo("Previous room: " .. self.info.previous.name .. " (" .. self.info.previous.hash .. ")\n")
-  echo("Previous room coordinates: " .. tostring(getRoomCoordinates(self.info.previous.room_id)) .. "\n")
-  echo("Current room: " .. self.info.current.name .. " (" .. self.info.current.hash .. ")\n")
-  echo("Calculated coordinates: " .. table.concat(coords, ", ") .. "\n")
   return coords
 end
 
