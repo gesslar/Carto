@@ -27,6 +27,13 @@ In Mudlet, type `walk` to see the help information for this package.
 While there is no official support and this is a hobby project, you are welcome
 to report issues on the [GitHub repo](https://github.com/gesslar/Carto).
 
+## Dependencies
+
+The following packages are required and will be automatically installed if they
+are missing:
+
+* [Helper](https://github.com/gesslar/Helper)
+
 ## Credits
 
 [Compass icons created by Freepik - Flaticon](https://www.flaticon.com/free-icons/map)
