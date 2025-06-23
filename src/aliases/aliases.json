@@ -1,6 +1,10 @@
 [
-    {
-        "name" : "Walk",
-        "regex" : "^walk(.*)$"
-    }
+  {
+    "name" : "Walk",
+    "regex" : "^walk(.*)$"
+  },
+  {
+    "name" : "Carto",
+    "regex" : "^carto(.*)$"
+  }
 ]

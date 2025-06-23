@@ -1,6 +1,7 @@
 {
-    "Lua.diagnostics.globals": [
-        "doSpeedWalk",
-        "mudlet"
-    ]
+  "Lua.diagnostics.globals": [
+    "doSpeedWalk",
+    "mudlet"
+  ],
+  "Lua.runtime.version": "Lua 5.1",
 }

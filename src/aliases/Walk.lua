@@ -14,7 +14,8 @@ if command == "remember" then
 elseif command == "forget" then
   Carto:ForgetRoom(value and tonumber(value) or nil)
 elseif command == "recall" then
-  if value ~= "" then
+  if value ~= "" then    -- ---@diagnostic disable-next-line: param-type-mismatch
+    ---@diagnostic disable-next-line: param-type-mismatch
     Carto:RecallRoom(tonumber(value))
   else
     Carto:DisplayRecalls()
@@ -26,7 +27,7 @@ elseif command == "stop" then
   if not walking then
     echo("You are not walking.\n")
   else
-    Carto:ResetWalking()
+    Carto:ResetWalking(false, "User stopped the walk")
     echo("Speedwalk stopped.\n")
   end
 elseif command == "speed" then
@@ -58,5 +59,6 @@ elseif command == "to" and tonumber(value) then
   end
 else
   -- Print out the walk instructions
+---@diagnostic disable-next-line: undefined-global
   helper.print({text = Carto.help.topics.usage, styles = Carto.help_styles})
 end
