@@ -3,9 +3,4 @@
 build/
 .output
 
-# Ignore any file starting with "muddle" in the project root directory
-# This utility file is specific to individual developers and should not be
-# included in the repo
-/muddle*
-
 generic_mapper.lua
