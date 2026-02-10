@@ -1,7 +1,8 @@
 {
+  "name": "carto",
   "scripts": {
-    "build": "muddle",
-    "watch": "muddle -w"
+    "build": "npx @gesslar/muddy",
+    "watch": "npx @gesslar/muddy -w"
   },
-  "license": "Unlicense"
+  "license": "0BSD"
 }
