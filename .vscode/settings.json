@@ -1,7 +1,12 @@
 {
   "Lua.diagnostics.globals": [
     "doSpeedWalk",
-    "mudlet"
+    "mudlet",
+    "gmod",
+    "helper"
   ],
   "Lua.runtime.version": "Lua 5.1",
+  "Lua.workspace.library": [
+    "/home/gesslar/.config/Code/User/globalStorage/delwing.mudlet-scripts-sdk\\docs"
+  ],
 }

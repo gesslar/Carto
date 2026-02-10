@@ -64,8 +64,12 @@ to report issues on the [GitHub repo](https://github.com/gesslar/Carto).
 The following packages are required and will be automatically installed if they
 are missing:
 
-* [Helper](https://github.com/gesslar/Helper)
+- [Helper](https://github.com/gesslar/Helper)
 
 ## Credits
 
 [Compass icons created by Freepik - Flaticon](https://www.flaticon.com/free-icons/map)
+
+## License
+
+`carto` is released under the [0BSD](LICENSE.txt).
