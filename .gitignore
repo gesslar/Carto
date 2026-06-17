@@ -4,3 +4,4 @@ build/
 .output
 
 generic_mapper.lua
+.vscode/
