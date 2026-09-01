@@ -4,11 +4,5 @@
     "isFolder": "no",
     "name": "Carto",
     "script": ""
-  },
-  {
-    "isActive": "yes",
-    "isFolder": "no",
-    "name": "Dependent",
-    "script": ""
   }
 ]

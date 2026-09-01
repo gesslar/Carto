@@ -21,7 +21,7 @@ local script_name = "Carto"
 ---@field stubs table
 ---@field vectors table
 ---@field dependencies table
----@field g table -- Instance of Glu
+---@field glu table -- Instance of Glu
 Carto = Carto or {
   config = {
     name = script_name,                                     -- Name of the script
@@ -238,7 +238,7 @@ Carto = Carto or {
     { name = "mpkg",   url = "https://mudlet.github.io/mudlet-package-repository/packages/mpkg.mpackage" },
   },
   debug = false,
-  g = require("__PKGNAME__/Glu-single")("__PKGNAME__"),
+  glu = require("__PKGNAME__/vendor/Glu-single")("__PKGNAME__"),
 }
 
 -- For debugging
@@ -256,7 +256,7 @@ function Carto:LoadPreferences()
   -- Glu handles file existence, load, and the top-level merge. It merges onto a
   -- copy of the defaults, so self.default stays pristine for the nested gmcp
   -- merge below.
-  self.prefs = self.g.preferences.load(
+  self.prefs = self.glu.preferences.load(
     nil, self.config.preferences_file, self.default
   )
 
@@ -301,7 +301,7 @@ function Carto:LoadPreferences()
 end
 
 function Carto:SavePreferences()
-  self.g.preferences.save(
+  self.glu.preferences.save(
     nil, self.config.preferences_file, self.prefs
   )
   self:UpdateGMCPHandler()
@@ -419,9 +419,6 @@ function Carto:SetupEventHandlers()
     "sysDisconnectionEvent",
     "sysExitEvent",
     "carto.config",
-    -- Dependent events
-    "DependentCompleted",
-    "DependentFailed",
   }
 
   local registered_handlers = getNamedEventHandlers(self.config.name) or {}
@@ -456,8 +453,6 @@ function Carto:EventHandler(event, ...)
     self:Move(event, ...)       -- arg1 is the GMCP package name
   elseif event == "carto.AddOrUpdateRoomconfig" then
     self:Config(event, ...)
-  elseif event == "DependentCompleted" or event == "DependentFailed" then
-    self:Dependent(event, ...)
   elseif event == "carto.config" then
     self:Config(event, ...)
   end
@@ -488,20 +483,35 @@ function Carto:UpdateGMCPHandler()
 end
 
 -- ----------------------------------------------------------------------------
--- Dependent
+-- Dependencies
+--
+-- Uses Glu's dependency_queue glass to install any missing required packages.
+-- It filters out packages that are already installed, installs the rest in
+-- sequence, and invokes the callback once finished. On success we proceed with
+-- Setup; on failure we tell the user to install the dependencies manually.
 -- ----------------------------------------------------------------------------
 
-function Carto:Dependent(event, source_script, dependencies)
-  if source_script ~= self.config.name then return end
+function Carto:InstallDependencies()
+  local queue = self.glu.dependency_queue.new_dependency_queue(
+    self.dependencies,
+    function(success, message)
+      if success then
+        self:Setup("sysInstall", self.config.package_name)
+      else
+        local fb =
+          "Could not install all dependencies, please install " ..
+          "them manually."
 
-  if event == "DependentCompleted" then
-    self:Setup("sysInstall", self.config.package_name)
-  elseif event == "DependentFailed" then
-    cecho("\n")
-    cecho(f "<orange_red>Could not install all dependencies, please install them manually.\n")
-    for _, dependency in ipairs(dependencies.still_missing) do
-      cecho(f "  <orange_red>Missing dependency: {dependency}\n")
+        cecho("\n")
+        cecho(f "<orange_red>{message or fb}\n")
+      end
     end
+  )
+
+  -- new_dependency_queue returns nil when every dependency is already
+  -- installed (the callback has already fired); only start a real queue.
+  if queue then
+    queue.start()
   end
 end
 
@@ -644,7 +654,9 @@ function Carto:Install(event, package)
 
   deleteNamedEventHandler(self.config.name, "Carto:Install")
 
-  self:Setup(event, package)
+  -- Install any missing dependencies first; Setup runs from the callback once
+  -- they are all present (or immediately if nothing is missing).
+  self:InstallDependencies()
 end
 
 ---@param event string
