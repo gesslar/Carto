@@ -5,3 +5,4 @@ build/
 
 generic_mapper.lua
 .vscode/
+node_modules/

@@ -5,6 +5,24 @@
 This is a Mudlet package that allows you to map your adventures. It relies on
 GMCP to get the room information.
 
+## What happens
+
+When I do some lua example?
+
+```lua
+-- This is how you can do long strings in lua...
+[[text
+and more
+
+text
+
+awesome
+
+right?]]
+
+-- we can all agree that this is awesome, yes?
+```
+
 ## GMCP Configuration
 
 To configure the package, type `carto` in Mudlet. You will be provided with a

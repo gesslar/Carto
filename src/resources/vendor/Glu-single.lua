@@ -308,8 +308,8 @@ local Glu
     --- Register a glass on this instance after construction.
     --- Delegates to Glu.glass.register and then instantiates the
     --- glass on this instance so it is immediately available.
-    --- @param class_opts table Glass registration options (same as Glu.glass.register)
-    --- @return table The registered glass class
+    ---@param class_opts table Glass registration options (same as Glu.glass.register)
+    ---@return table glass The registered glass class
     function instance.register(class_opts)
       local is_new = not Glu.has_glass(class_opts.name)
       local glass = Glu.glass.register(class_opts)
@@ -563,6 +563,11 @@ local Glu
           G.setup(___, self, instance_opts, container)
         end
 
+        --- Determines whether this instance extends the given base class.
+        --- Walks up the parent chain looking for a match against the base class.
+        ---
+        ---@param base_class table The base class to check against.
+        ---@return boolean extends Whether this instance extends the base class.
         function self.extending(base_class)
           local current_instance = self
           while current_instance do
@@ -628,6 +633,16 @@ local GlassLoaderClass = Glu.glass.register({
   dependencies = { "try", "http", "fd", "string" },
   setup = function(___, self, instance_opts, container)
 
+    --- Loads a "glass" (a Lua module/chunk) from a local file path or an
+    --- http(s) URL. URL loads are asynchronous and the result is delivered
+    --- through the callback. The loaded chunk can optionally be executed.
+    ---
+    ---@param opts table The options table. Fields: `path` (string) a local file path or http(s) URL, `cb`/`callback` (function, required) invoked with the loaded chunk on success or with (nil, errorMessage) on failure, and `execute` (boolean) whether to immediately execute the loaded chunk.
+    ---@return boolean|nil ok Returns `false` and an error message when no callback is provided; otherwise returns nothing, as results are delivered through the callback.
+    ---@example
+    --- ```lua
+    --- glass_loader.load_glass({path = "https://example.com/thing.lua", cb = function(g, err) end})
+    --- ```
     function self.load_glass(opts)
       opts = opts or {}
       local path = opts.path
@@ -722,10 +737,10 @@ local ConditionsClass = Glu.glass.register({
   dependencies = {},
   setup = function(___, self)
     --- Checks if a condition is true or false.
-    --- @param condition boolean - The condition to check
-    --- @param message string|nil - The message to return if the condition is false
-    --- @return boolean - The condition
-    --- @return string|nil - The message
+    ---@param condition boolean The condition to check
+    ---@param message string|nil The message to return if the condition is false
+    ---@return boolean ok The condition
+    ---@return string|nil message The message
     function self.is(condition, message)
       assert(type(condition) == "boolean", "Expected a boolean as the first argument")
       assert(type(message) == "string" or message == nil, "Expected a string or nil as the second argument")
@@ -739,47 +754,47 @@ local ConditionsClass = Glu.glass.register({
     end
 
     --- Checks if a condition is true.
-    --- @param condition boolean - The condition to check
-    --- @param message string|nil - The message to return if the condition is false
-    --- @return boolean - The condition
-    --- @return string|nil - The message
+    ---@param condition boolean The condition to check
+    ---@param message string|nil The message to return if the condition is false
+    ---@return boolean ok The condition
+    ---@return string|nil message The message
     function self.is_true(condition, message)
       return self.is(condition, message or "Expected condition to be true")
     end
 
     --- Checks if a condition is false.
-    --- @param condition boolean - The condition to check
-    --- @param message string|nil - The message to return if the condition is true
-    --- @return boolean - The condition
-    --- @return string|nil - The message
+    ---@param condition boolean The condition to check
+    ---@param message string|nil The message to return if the condition is true
+    ---@return boolean ok The condition
+    ---@return string|nil message The message
     function self.is_false(condition, message)
       return self.is(not condition, message or "Expected condition to be false")
     end
 
     --- Checks if a value is nil.
-    --- @param value any - The value to check
-    --- @param message string|nil - The message to return if the value is not nil
-    --- @return boolean - The condition
-    --- @return string|nil - The message
+    ---@param value any The value to check
+    ---@param message string|nil The message to return if the value is not nil
+    ---@return boolean ok The condition
+    ---@return string|nil message The message
     function self.is_nil(value, message)
       return self.is(value == nil, message or "Expected `{value}` to be nil")
     end
 
     --- Checks if a value is not nil.
-    --- @param value any - The value to check
-    --- @param message string|nil - The message to return if the value is nil
-    --- @return boolean - The condition
-    --- @return string|nil - The message
+    ---@param value any The value to check
+    ---@param message string|nil The message to return if the value is nil
+    ---@return boolean ok The condition
+    ---@return string|nil message The message
     function self.is_not_nil(value, message)
       return self.is(value ~= nil, message or "Expected `{value}` to not be nil")
     end
 
     --- Checks if a function throws an error.
-    --- @param func function - The function to check
-    --- @param message string|nil - The message to return if the function does not throw an error
-    --- @param check function|nil - The function to check the error message against
-    --- @return boolean - The condition
-    --- @return string|nil - The message
+    ---@param func function The function to check
+    ---@param message string|nil The message to return if the function does not throw an error
+    ---@param check function|nil The function to check the error message against
+    ---@return boolean ok The condition
+    ---@return string|nil message The message
     function self.is_error(func, message, check)
       assert(type(func) == "function", "Expected a function as the first argument")
       assert(type(message) == "string" or message == nil, "Expected a string or nil as the second argument")
@@ -807,86 +822,86 @@ local ConditionsClass = Glu.glass.register({
     end
 
     --- Checks if two values are equal.
-    --- @param a any - The first value to check
-    --- @param b any - The second value to check
-    --- @param message string|nil - The message to return if the values are not equal
-    --- @return boolean - The condition
-    --- @return string|nil - The message
+    ---@param a any The first value to check
+    ---@param b any The second value to check
+    ---@param message string|nil The message to return if the values are not equal
+    ---@return boolean ok The condition
+    ---@return string|nil message The message
     function self.is_eq(a, b, message)
       return self.is(a == b,
         message or f "Expected `{a}` to equal `{b}`\n")
     end
 
     --- Checks if two values are not equal.
-    --- @param a any - The first value to check
-    --- @param b any - The second value to check
-    --- @param message string|nil - The message to return if the values are equal
-    --- @return boolean - The condition
-    --- @return string|nil - The message
+    ---@param a any The first value to check
+    ---@param b any The second value to check
+    ---@param message string|nil The message to return if the values are equal
+    ---@return boolean ok The condition
+    ---@return string|nil message The message
     function self.is_ne(a, b, message)
       return self.is(a ~= b,
         message or f "Expected `{a}` to not equal `{b}`\n")
     end
 
     --- Checks if a value is less than another value.
-    --- @param a any - The first value to check
-    --- @param b any - The second value to check
-    --- @param message string|nil - The message to return if the values are not less than
-    --- @return boolean - The condition
-    --- @return string|nil - The message
+    ---@param a any The first value to check
+    ---@param b any The second value to check
+    ---@param message string|nil The message to return if the values are not less than
+    ---@return boolean ok The condition
+    ---@return string|nil message The message
     function self.is_lt(a, b, message)
       return self.is(a < b,
         message or f "Expected `{a}` to be less than `{b}`\n")
     end
 
     --- Checks if a value is less than or equal to another value.
-    --- @param a any - The first value to check
-    --- @param b any - The second value to check
-    --- @param message string|nil - The message to return if the values are not less than or equal to
-    --- @return boolean - The condition
-    --- @return string|nil - The message
+    ---@param a any The first value to check
+    ---@param b any The second value to check
+    ---@param message string|nil The message to return if the values are not less than or equal to
+    ---@return boolean ok The condition
+    ---@return string|nil message The message
     function self.is_le(a, b, message)
       return self.is(a <= b,
         message or f "Expected `{a}` to be less than or equal to `{b}`\n")
     end
 
     --- Checks if a value is greater than another value.
-    --- @param a any - The first value to check
-    --- @param b any - The second value to check
-    --- @param message string|nil - The message to return if the values are not greater than
-    --- @return boolean - The condition
-    --- @return string|nil - The message
+    ---@param a any The first value to check
+    ---@param b any The second value to check
+    ---@param message string|nil The message to return if the values are not greater than
+    ---@return boolean ok The condition
+    ---@return string|nil message The message
     function self.is_gt(a, b, message)
       return self.is(a > b,
         message or f "Expected `{a}` to be greater than `{b}`\n")
     end
 
     --- Checks if a value is greater than or equal to another value.
-    --- @param a any - The first value to check
-    --- @param b any - The second value to check
-    --- @param message string|nil - The message to return if the values are not greater than or equal to
-    --- @return boolean - The condition
-    --- @return string|nil - The message
+    ---@param a any The first value to check
+    ---@param b any The second value to check
+    ---@param message string|nil The message to return if the values are not greater than or equal to
+    ---@return boolean ok The condition
+    ---@return string|nil message The message
     function self.is_ge(a, b, message)
       return self.is(a >= b, message or f "Expected `{a}` to be greater than or equal to `{b}`\n")
     end
 
     --- Checks if a value is of a specific type.
-    --- @param value any - The value to check
-    --- @param type string - The type to check against
-    --- @param message string|nil - The message to return if the values are not of the specified type
-    --- @return boolean - The condition
-    --- @return string|nil - The message
+    ---@param value any The value to check
+    ---@param expected_type string The type to check against
+    ---@param message string|nil The message to return if the values are not of the specified type
+    ---@return boolean ok The condition
+    ---@return string|nil message The message
     function self.is_type(value, expected_type, message)
       return self.is(type(value) == expected_type, message or f "Expected `{value}` to be of type `{expected_type}`\n")
     end
 
     --- Checks if two values are deeply equal.
-    --- @param a any - The first value to check
-    --- @param b any - The second value to check
-    --- @param message string|nil - The message to return if the values are not deeply equal
-    --- @return boolean - The condition
-    --- @return string|nil - The message
+    ---@param a any The first value to check
+    ---@param b any The second value to check
+    ---@param message string|nil The message to return if the values are not deeply equal
+    ---@return boolean ok The condition
+    ---@return string|nil message The message
     function self.is_deeply(a, b, message)
       local result, mess
 
@@ -959,16 +974,16 @@ local ColourClass = Glu.glass.register({
     --- - ease_in
     --- - ease_out
     ---
-    --- @example
+    ---@example
     --- ```lua
     --- colour.interpolate({255, 0, 0}, {0, 0, 255}, 50)
     --- -- {127, 0, 127}
     --- ```
-    --- @param rgb1 table - The first RGB colour as a table with three elements: red, green, and blue.
-    --- @param rgb2 table - The second RGB colour as a table with three elements: red, green, and blue.
-    --- @param factor number - The step value between 0 and 1.
-    --- @param method string - The interpolation method to use. (Optional, defaults to "smooth")
-    --- @return table - The interpolated RGB colour as a table with three elements: red, green, and blue.
+    ---@param rgb1 table The first RGB colour as a table with three elements: red, green, and blue.
+    ---@param rgb2 table The second RGB colour as a table with three elements: red, green, and blue.
+    ---@param factor number The step value between 0 and 1.
+    ---@param method string The interpolation method to use. (Optional, defaults to "smooth")
+    ---@return table rgb The interpolated RGB colour as a table with three elements: red, green, and blue.
     function self.interpolate(rgb1, rgb2, factor, method)
       ___.v.rgb_table(rgb1, 1, false)
       ___.v.rgb_table(rgb2, 2, false)
@@ -1014,6 +1029,15 @@ local ColourClass = Glu.glass.register({
       return self.hsl_to_rgb({ h, s, l })
     end
 
+    --- Converts an RGB colour to HSL.
+    --- Returns hue in degrees (0-360) and saturation and lightness as percentages (0-100).
+    ---
+    ---@param rgb table The RGB colour as a table with three elements: red, green, and blue.
+    ---@return table hsl The HSL colour as a table with three elements: hue, saturation, and lightness.
+    ---@example
+    --- ```lua
+    --- colour.rgb_to_hsl({255, 0, 0})
+    --- ```
     function self.rgb_to_hsl(rgb)
       ___.v.rgb_table(rgb, 1, false)
 
@@ -1045,11 +1069,11 @@ local ColourClass = Glu.glass.register({
     end
 
     --- Converts an RGB colour to a hex string.
-    --- @param rgb table - The RGB colour as a table with three elements: red, green, and blue.
-    --- @param background table - An optional background RGB colour as a table with three elements: red, green, and blue.
-    --- @return string - The hex string.
+    ---@param rgb table The RGB colour as a table with three elements: red, green, and blue.
+    ---@param background table An optional background RGB colour as a table with three elements: red, green, and blue.
+    ---@return string hex The hex string.
     ---
-    --- @example
+    ---@example
     --- ```lua
     --- colour.to_hex({255, 255, 255})
     --- -- "#ffffff"
@@ -1076,10 +1100,10 @@ local ColourClass = Glu.glass.register({
     end
 
     --- Converts an HSL colour to an RGB colour.
-    --- @param hsl table - The HSL colour as a table with three elements: hue, saturation, and lightness.
-    --- @return table - The RGB colour as a table with three elements: red, green, and blue.
+    ---@param hsl table The HSL colour as a table with three elements: hue, saturation, and lightness.
+    ---@return table rgb The RGB colour as a table with three elements: red, green, and blue.
     ---
-    --- @example
+    ---@example
     --- ```lua
     --- colour.hsl_to_rgb({180, 50, 50})
     --- -- {127, 127, 127}
@@ -1120,10 +1144,10 @@ local ColourClass = Glu.glass.register({
     end
 
     --- Determines if a colour is a light colour.
-    --- @param rgb table - The RGB colour as a table with three elements: red, green, and blue.
-    --- @return boolean - True if the colour is light, false otherwise.
+    ---@param rgb table The RGB colour as a table with three elements: red, green, and blue.
+    ---@return boolean is_light True if the colour is light, false otherwise.
     ---
-    --- @example
+    ---@example
     --- ```lua
     --- colour.is_light({255, 255, 255})
     --- -- true
@@ -1139,10 +1163,10 @@ local ColourClass = Glu.glass.register({
     end
 
     --- Lightens or darkens a colour by a given amount.
-    --- @param rgb table - The RGB colour as a table with three elements: red, green, and blue.
-    --- @param amount number - The amount to adjust the colour by.
-    --- @param lighten boolean - Whether to lighten (true) or darken (false) the colour.
-    --- @return table - The adjusted RGB colour as a table with three elements: red, green, and blue.
+    ---@param rgb table The RGB colour as a table with three elements: red, green, and blue.
+    ---@param amount number The amount to adjust the colour by.
+    ---@param lighten boolean Whether to lighten (true) or darken (false) the colour.
+    ---@return table rgb The adjusted RGB colour as a table with three elements: red, green, and blue.
     function self.adjust_colour(rgb, amount, lighten)
       ___.v.rgb_table(rgb, 1, false)
       ___.v.type(amount, "number", 2, true)
@@ -1159,11 +1183,11 @@ local ColourClass = Glu.glass.register({
     end
 
     --- Lightens a colour by a given amount.
-    --- @param rgb table - The RGB colour as a table with three elements: red, green, and blue.
-    --- @param amount number - The amount to lighten the colour by. (Optional, defaults to 30)
-    --- @return table - The lightened RGB colour as a table with three elements: red, green, and blue.
+    ---@param rgb table The RGB colour as a table with three elements: red, green, and blue.
+    ---@param amount number The amount to lighten the colour by. (Optional, defaults to 30)
+    ---@return table rgb The lightened RGB colour as a table with three elements: red, green, and blue.
     ---
-    --- @example
+    ---@example
     --- ```lua
     --- colour.lighten({100,100,100},50)
     --- -- {150, 150, 150}
@@ -1174,11 +1198,11 @@ local ColourClass = Glu.glass.register({
 
     --- Darkens a colour by a given amount.
     ---
-    --- @param rgb table - The RGB colour as a table with three elements: red, green, and blue.
-    --- @param amount number - The amount to darken the colour by. (Optional, defaults to 30)
-    --- @return table - The darkened RGB colour as a table with three elements: red, green, and blue.
+    ---@param rgb table The RGB colour as a table with three elements: red, green, and blue.
+    ---@param amount number The amount to darken the colour by. (Optional, defaults to 30)
+    ---@return table rgb The darkened RGB colour as a table with three elements: red, green, and blue.
     ---
-    --- @example
+    ---@example
     --- ```lua
     --- colour.darken({100,100,100},50)
     --- -- {50, 50, 50}
@@ -1189,12 +1213,12 @@ local ColourClass = Glu.glass.register({
 
     --- Lightens or darkens the first colour by a given amount based on a comparison with the second colour.
     --- If the colours are already contrasting, the original colour is returned.
-    --- @param rgb_compare table - The first RGB colour as a table with three elements: red, green, and blue.
-    --- @param rgb_colour table - The second RGB colour as a table with three elements: red, green, and blue.
-    --- @param amount number - The amount to lighten or darken the colour by. (Optional, defaults to 85)
-    --- @return table - The adjusted RGB colour as a table with three elements: red, green, and blue. Unless the colours are already constrasted, in which case the original colour is returned.
+    ---@param rgb_colour table The RGB colour to adjust, as a table with three elements: red, green, and blue.
+    ---@param rgb_compare table The RGB colour to compare against, as a table with three elements: red, green, and blue.
+    ---@param amount number The amount to lighten or darken the colour by. (Optional, defaults to 85)
+    ---@return table rgb The adjusted RGB colour as a table with three elements: red, green, and blue. Unless the colours are already constrasted, in which case the original colour is returned.
     ---
-    --- @example
+    ---@example
     --- ```lua
     --- colour.lighten_or_darken({100,100,100}, {255,255,255}, 50)
     --- -- {100, 100, 100}
@@ -1223,13 +1247,13 @@ local ColourClass = Glu.glass.register({
     end
 
     --- Returns the complementary colour of a given colour.
-    --- @example
+    ---@example
     --- ```lua
     --- colour.complementary({ 150, 150, 150 })
     --- -- { 105, 105, 105 }
     --- ```
-    --- @param rgb table - The RGB colour as a table with three elements: red, green, and blue.
-    --- @return table - The complementary RGB colour as a table with three elements: red, green, and blue.
+    ---@param rgb table The RGB colour as a table with three elements: red, green, and blue.
+    ---@return table rgb The complementary RGB colour as a table with three elements: red, green, and blue.
     function self.complementary(rgb)
       ___.v.rgb_table(rgb, 1, false)
 
@@ -1241,13 +1265,13 @@ local ColourClass = Glu.glass.register({
     end
 
     --- Converts a colour to its grayscale equivalent.
-    --- @example
+    ---@example
     --- ```lua
     --- colour.grayscale({ 35, 50, 100 })
     --- -- { 62, 62, 62 }
     --- ```
-    --- @param rgb table - The RGB colour as a table with three elements: red, green, and blue.
-    --- @return table - The grayscale RGB colour as a table with three elements: red, green, and blue.
+    ---@param rgb table The RGB colour as a table with three elements: red, green, and blue.
+    ---@return table gray The grayscale RGB colour as a table with three elements: red, green, and blue.
     function self.grayscale(rgb)
       ___.v.rgb_table(rgb, 1, false)
 
@@ -1256,14 +1280,14 @@ local ColourClass = Glu.glass.register({
     end
 
     --- Adjusts the saturation of a colour by a given factor.
-    --- @example
+    ---@example
     --- ```lua
     --- colour.adjust_saturation({ 35, 50, 100 }, 0.5)
     --- -- { 48, 55, 80 }
     --- ```
-    --- @param rgb table - The RGB colour as a table with three elements: red, green, and blue.
-    --- @param factor number - A factor between 0 (fully desaturated) and 1 (fully saturated).
-    --- @return table - The adjusted RGB colour as a table with three elements: red, green, and blue.
+    ---@param rgb table The RGB colour as a table with three elements: red, green, and blue.
+    ---@param factor number A factor between 0 (fully desaturated) and 1 (fully saturated).
+    ---@return table rgb The adjusted RGB colour as a table with three elements: red, green, and blue.
     function self.adjust_saturation(rgb, factor)
       ___.v.rgb_table(rgb, 1, false)
       ___.v.type(factor, "number", 2, true)
@@ -1278,25 +1302,25 @@ local ColourClass = Glu.glass.register({
     end
 
     --- Generates a random RGB colour.
-    --- @example
+    ---@example
     --- ```lua
     --- colour.random()
     --- -- { 123, 45, 67 }
     --- ```
-    --- @return table - A random RGB colour as a table with three elements: red, green, and blue.
+    ---@return table rgb A random RGB colour as a table with three elements: red, green, and blue.
     function self.random()
       return { math.random(0, 255), math.random(0, 255), math.random(0, 255) }
     end
 
     --- Generates a random shade of a given colour within a range.
-    --- @example
+    ---@example
     --- ```lua
     --- colour.random_shade({ 100, 100, 100 }, 50)
     --- -- { 150, 150, 150 }
     --- ```
-    --- @param rgb table - The RGB colour as a table with three elements: red, green, and blue.
-    --- @param range number - The range to adjust the colour by (e.g., 50 means +/- 50 for R, G, and B). (Optional, defaults to 50)
-    --- @return table - A random RGB colour that is a shade of the given colour.
+    ---@param rgb table The RGB colour as a table with three elements: red, green, and blue.
+    ---@param range number The range to adjust the colour by (e.g., 50 means +/- 50 for R, G, and B). (Optional, defaults to 50)
+    ---@return table rgb A random RGB colour that is a shade of the given colour.
     function self.random_shade(rgb, range)
       ___.v.rgb_table(rgb, 1, false)
       ___.v.type(range, "number", 2, true)
@@ -1312,13 +1336,13 @@ local ColourClass = Glu.glass.register({
     --- Generates the triad colours of a given colour. Does not return the
     --- original colour, but two returned colours that are considered tritones of
     --- the original colour.
-    --- @example
+    ---@example
     --- ```lua
     --- colour.triad({ 100, 100, 100 })
     --- -- { { 15, 204, 204 }, { 100, 204, 204 } }
     --- ```
-    --- @param rgb table - The RGB colour as a table with three elements: red, green, and blue.
-    --- @return table - A table of RGB colours that are the triad of the given colour.
+    ---@param rgb table The RGB colour as a table with three elements: red, green, and blue.
+    ---@return table triad A table of RGB colours that are the triad of the given colour.
     function self.triad(rgb)
       ___.v.rgb_table(rgb, 1, false)
 
@@ -1333,10 +1357,10 @@ local ColourClass = Glu.glass.register({
     --- Generates the analogous colours of a given colour.
     --- The analogous colours are generated by rotating the hue of the given
     --- colour by a given angle.
-    --- @param rgb table - The RGB colour as a table with three elements: red, green, and blue.
-    --- @param angle number - The angle to separate the analogous colours by. (Optional, defaults to 30)
-    --- @return table - A table of RGB colours that are analogous to the given colour.
-    --- @example
+    ---@param rgb table The RGB colour as a table with three elements: red, green, and blue.
+    ---@param angle number The angle to separate the analogous colours by. (Optional, defaults to 30)
+    ---@return table analogous A table of RGB colours that are analogous to the given colour.
+    ---@example
     --- ```lua
     --- colour.analogous({ 100, 100, 100 })
     --- -- { { 70, 100, 100 }, { 100, 100, 100 }, { 130, 100, 100 } }
@@ -1356,14 +1380,14 @@ local ColourClass = Glu.glass.register({
     end
 
     --- Generates the split complement colours of a given colour.
-    --- @example
+    ---@example
     --- ```lua
     --- colour.split_complement({ 100, 100, 100 })
     --- -- { { 15, 204, 204 }, { 100, 204, 204 } }
     --- ```
-    --- @param rgb table - The RGB colour as a table with three elements: red, green, and blue.
-    --- @param angle number - The angle to separate the split complement colours by. (Optional, defaults to 30)
-    --- @return table - A table of RGB colours that are the split complement of the given colour.
+    ---@param rgb table The RGB colour as a table with three elements: red, green, and blue.
+    ---@param angle number The angle to separate the split complement colours by. (Optional, defaults to 30)
+    ---@return table split_complement A table of RGB colours that are the split complement of the given colour.
     function self.split_complement(rgb, angle)
       ___.v.rgb_table(rgb, 1, false)
       ___.v.type(angle, "number", 2, true)
@@ -1379,14 +1403,14 @@ local ColourClass = Glu.glass.register({
     end
 
     --- Generates a series of monochromatic colours based on a given colour.
-    --- @example
+    ---@example
     --- ```lua
     --- colour.monochrome({ 100, 100, 100 })
     --- -- { { 100, 100, 100 }, { 100, 100, 100 }, { 100, 100, 100 } }
     --- ```
-    --- @param rgb table - The RGB colour as a table with three elements: red, green, and blue.
-    --- @param steps number - The number of variations to generate. (Optional, defaults to 5)
-    --- @return table - A table of RGB colours that are monochromatic variations of the given colour.
+    ---@param rgb table The RGB colour as a table with three elements: red, green, and blue.
+    ---@param steps number The number of variations to generate. (Optional, defaults to 5)
+    ---@return table results A table of RGB colours that are monochromatic variations of the given colour.
     function self.monochrome(rgb, steps)
       ___.v.rgb_table(rgb, 1, false)
       ___.v.type(steps, "number", 2, true)
@@ -1406,13 +1430,13 @@ local ColourClass = Glu.glass.register({
     end
 
     --- Generates the tetrad colours of a given colour.
-    --- @example
+    ---@example
     --- ```lua
     --- colour.tetrad({ 100, 100, 100 })
     --- -- { { 100, 100, 100 }, { 100, 100, 100 }, { 100, 100, 100 }, { 100, 100, 100 } }
     --- ```
-    --- @param rgb table - The RGB colour as a table with three elements: red, green, and blue.
-    --- @return table - A table of RGB colours that are the tetrad of the given colour.
+    ---@param rgb table The RGB colour as a table with three elements: red, green, and blue.
+    ---@return table tetrad A table of RGB colours that are the tetrad of the given colour.
     function self.tetrad(rgb)
       ___.v.rgb_table(rgb, 1, false)
 
@@ -1426,14 +1450,14 @@ local ColourClass = Glu.glass.register({
     end
 
     --- Calculates the contrast ratio between two colours.
-    --- @example
+    ---@example
     --- ```lua
     --- colour.contrast_ratio({ 100, 100, 100 }, { 0, 0, 0 })
     --- -- 12.0
     --- ```
-    --- @param rgb1 table - The first RGB colour as a table with three elements: red, green, and blue.
-    --- @param rgb2 table - The second RGB colour as a table with three elements: red, green, and blue.
-    --- @return number - The contrast ratio between the two colours.
+    ---@param rgb1 table The first RGB colour as a table with three elements: red, green, and blue.
+    ---@param rgb2 table The second RGB colour as a table with three elements: red, green, and blue.
+    ---@return number ratio The contrast ratio between the two colours.
     function self.contrast_ratio(rgb1, rgb2)
       ___.v.rgb_table(rgb1, 1, false)
       ___.v.rgb_table(rgb2, 2, false)
@@ -1458,13 +1482,13 @@ local ColourClass = Glu.glass.register({
     end
 
     --- Calculates the contrasting colour based on the luminance of a given colour.
-    --- @example
+    ---@example
     --- ```lua
     --- colour.contrast({ 100, 100, 100 })
     --- -- { 0, 0, 0 }
     --- ```
-    --- @param rgb table - The RGB colour as a table with three elements: red, green, and blue.
-    --- @return table - The contrasting colour as a table with three elements: red, green, and blue.
+    ---@param rgb table The RGB colour as a table with three elements: red, green, and blue.
+    ---@return table rgb The contrasting colour as a table with three elements: red, green, and blue.
     function self.contrast(rgb)
       ___.v.rgb_table(rgb, 1, false)
 
@@ -1551,159 +1575,6 @@ local ColourClass = Glu.glass.register({
 })
 
 
--- File: command_queue.lua
-local CommandQueueClass = Glu.glass.register({
-  class_name = "CommandQueueClass",
-  name = "command_queue",
-  extends = "queue",
-  dependencies = {"timer"},
-  setup = function(___, self, opts)
-
-    local sequences = {}
-
-    -- Enum for the timer states
-    self.states = {
-      RUNNING = 1,
-      PAUSED  = 2,
-      STOPPED = 3,
-      ERROR   = -math.huge,
-    }
-
-    local SequenceCommands = {}
-    local paused = false
-    local currentIndex = 1
-
-    function self.queue(name, commands, delay)
-      ___.v.type(name, "string", 1, false)
-      ___.v.type(commands, "string", 2, true) -- Ensure commands is a string or table
-      ___.v.test(delay, "number", 3, false)
-      ___.v.test(delay >= 0, "delay must be greater than or equal to 0", 3, false)
-      ___.v.test(sequences[name] == nil, "sequence with name " .. name .. " already exists", 1, false)
-
-      if type(commands) == "string" then
-        commands = ___.string.split(commands, "\\|")
-      end
-
-      local sequence = {}
-
-      SequenceCommands = {}
-      paused = false
-      currentIndex = 1
-
-      SequenceCommands = ___.table.map(commands, function(_, v)
-        local f
-
-        if ___.string.starts_with(v, "lua ") then
-          local space = ___.string.index_of(v, "\\s")
-          if not space then
-            f = function()
-              printError("[ CommandQueue ] Invalid lua command: " .. tostring(v))
-            end
-          else
-            local command = v:sub(space + 1)
-            f = function()
-              local ok, err = pcall(function()
-                local chunk, load_err = loadstring(command)
-                if not chunk then
-                  error(load_err)
-                end
-                return chunk()
-              end)
-              if not ok then
-                printError("[ CommandQueue ] Lua error: " .. tostring(err))
-              end
-            end
-          end
-        else
-          f = function()
-            local ok, err = pcall(function() send(v) end)
-            if not ok then
-              printError("[ CommandQueue ] Send error: " .. tostring(err))
-            end
-          end
-        end
-
-        return { func = f }
-      end)
-
-      local result, err = ___.timer.multi(name, SequenceCommands, delay)
-      if not result then
-        return false, err
-      end
-
-      sequences[name] = sequence
-      executeNextCommand()
-    end
-
-    function executeNextCommand()
-      if paused or not SequenceCommands[currentIndex] then
-        return
-      end
-
-      send(SequenceCommands[currentIndex].cmd)
-      currentIndex = currentIndex + 1
-
-      if SequenceCommands[currentIndex] then
-        SequenceCommands[currentIndex].timer = ___.timer.multi("CommandExecution", {
-          { delay = 2, func = function() executeNextCommand() end }
-        })
-      end
-    end
-
-    function pauseExecution()
-      paused = true
-      if SequenceCommands[currentIndex] and SequenceCommands[currentIndex].timer then
-        ___.timer.kill_multi("CommandExecution")
-        echo("\n [ Pause ] Sequence\n")
-      end
-    end
-
-    function resumeExecution()
-      if paused then
-        paused = false
-        executeNextCommand()
-        echo("\n [ Resume ] Sequence\n")
-      end
-    end
-
-    function extendDelay(seconds)
-      if SequenceCommands[currentIndex] and SequenceCommands[currentIndex].timer then
-        ___.timer.kill_multi("CommandExecution")
-      end
-      SequenceCommands[currentIndex].timer = ___.timer.multi("CommandExecution", {
-        { delay = seconds, func = function() executeNextCommand() end }
-      })
-      echo("\n Extend for " .. seconds .. "\n")
-    end
-
-    function fullStop()
-      for _, data in pairs(SequenceCommands) do
-        if data.timer then
-          ___.timer.kill_multi("CommandExecution")
-        end
-      end
-      SequenceCommands = {}
-      paused = false
-      currentIndex = 1
-      echo("stopped.")
-    end
-
-    function repeatLastStep()
-      if currentIndex > 1 then
-        local lastCommand = SequenceCommands[currentIndex - 1]
-        if lastCommand then
-          send(lastCommand.cmd)
-          ___.timer.multi("CommandExecution", {
-            { delay = 1, func = function() executeNextCommand() end }
-          })
-        end
-      end
-    end
-
-  end
-})
-
-
 -- File: date.lua
 local DateClass = Glu.glass.register({
   class_name = "DateClass",
@@ -1712,6 +1583,22 @@ local DateClass = Glu.glass.register({
   setup = function(___, self, opts)
     local v = ___.v
 
+    --- Converts a number of seconds into hours, minutes, and seconds.
+    --- When `as_string` is true, returns a single human-readable string such as
+    --- "1h 2m 3s". Otherwise, returns three zero-padded "HH", "MM", "SS" strings.
+    ---
+    ---@param seconds number The number of seconds to convert.
+    ---@param as_string boolean|nil Whether to return a single formatted string instead of three values. (Optional. Default is false.)
+    ---@return string hours The zero-padded hours, or the single formatted string when `as_string` is true.
+    ---@return string minutes The zero-padded minutes. Not returned when `as_string` is true.
+    ---@return string seconds The zero-padded seconds. Not returned when `as_string` is true.
+    ---@example
+    --- ```lua
+    --- date.shms(3661)
+    --- -- "01", "01", "01"
+    --- date.shms(3661, true)
+    --- -- "1h 1m 1s"
+    --- ```
     function self.shms(seconds, as_string)
       v.type(seconds, "number", 1, false)
       v.type(as_string, "boolean", 2, true)
@@ -1774,8 +1661,16 @@ local DependencyQueueClass = Glu.glass.register({
   name = "dependency_queue",
   extends = "queue",
   call = "new_dependency_queue",
-  dependencies = { "queue", "table", },
+  dependencies = { "queue", "table", "fd", "url", },
   setup = function(___, self)
+    --- Builds a queue that installs any of the given Mudlet packages that are not already installed.
+    --- Filters out already-installed packages, downloads each remaining package into its own
+    --- temporary directory, installs it from there, and invokes the callback with success and a
+    --- message when finished.
+    ---
+    ---@param packages table List of package descriptors, each a {name, url} table.
+    ---@param cb function Callback called with a success boolean and a message string when finished.
+    ---@return object self The dependency queue object.
     function self.new_dependency_queue(packages, cb)
       local installed = getPackages()
       local not_installed = table.n_filter(packages, function(package)
@@ -1794,6 +1689,7 @@ local DependencyQueueClass = Glu.glass.register({
         cb = cb,
         queue = self.new_queue(),
         packages = not_installed,
+        current = nil,
         handler_name = f "dependency_{id}_installed",
       }
       ___.table.add(self, this)
@@ -1801,16 +1697,46 @@ local DependencyQueueClass = Glu.glass.register({
       for _, package in ipairs(not_installed) do
         local func = function()
           cecho("Installing dependency `<b>" .. package.name .. "</b>`...\n")
-          installPackage(package.url)
+
+          -- Mudlet's download and install events are global, and the URL they
+          -- carry may have been rewritten by redirection, so the URL cannot
+          -- identify an event as ours. The local path can: we name the file
+          -- for a fresh UUID that nothing else in the profile can collide
+          -- with. The name is ours to choose because Mudlet takes the package
+          -- name from the archive's config.lua manifest, not from the file --
+          -- only the extension has to survive, since that selects the format.
+          local dir = ___.fd.fix_path(getMudletHomeDir() .. "/tmp")
+          local ok, err = ___.fd.assure_dir(dir)
+          if not ok then
+            local reason = err or "unknown error"
+            self.cb(false, f "Could not create a temporary directory for `<b>{package.name}</b>`: {reason}\n")
+            self.clean_up()
+            return
+          end
+
+          local parsed = ___.url.parse(package.url)
+          local ext = parsed and parsed.file and string.match(parsed.file, "%.(%w+)$") or "mpackage"
+
+          self.current = {
+            package = package,
+            target = ___.fd.fix_path(dir .. "/" .. ___.id() .. "." .. ext),
+          }
+
+          downloadFile(self.current.target, package.url)
         end
 
         self.queue.push(func)
       end
 
-      registerNamedEventHandler("glu", self.handler_name, "sysInstall",
-        function(event, package)
-          if package ~= self.packages[1].name then return end
+      registerNamedEventHandler("glu", self.handler_name, "sysInstallPackage",
+        function(event, package, file)
+          -- sysInstallPackage reports the file Mudlet was asked to install, so
+          -- the same UUID path that identifies our downloads identifies our
+          -- installs. sysInstall carries only a package name, which any other
+          -- component installing something of that name would also produce.
+          if not self.is_ours(file) then return end
 
+          self.discard_temp()
           ___.table.shift(self.packages)
           tempTimer(1, function()
             local q, count = self.queue.execute()
@@ -1822,20 +1748,69 @@ local DependencyQueueClass = Glu.glass.register({
         end
       )
 
+      registerNamedEventHandler("glu", self.handler_name .. "_download_done", "sysDownloadDone",
+        function(event, local_file)
+          if not self.is_ours(local_file) then return end
+
+          installPackage(self.current.target)
+        end
+      )
+
       registerNamedEventHandler("glu", self.handler_name .. "_download_error", "sysDownloadError",
-        function(event, package)
-          self.cb(false, f "Failed to download dependency `<b>{package}</b>`.\nCleaning up.\n")
+        function(event, err, local_file, url)
+          if not self.is_ours(local_file) then return end
+
+          local name = self.current.package.name
+          local reason = err or "unknown error"
+
+          self.discard_temp()
+          self.cb(false, f "Failed to download dependency `<b>{name}</b>`: {reason}\nCleaning up.\n")
           self.clean_up()
         end
       )
 
+      --- Determines whether a download or install event refers to the file this
+      --- queue is currently working on. The path was chosen by us and contains a UUID,
+      --- so an exact match is unambiguous and no guessing is required.
+      ---
+      ---@param local_file string? The local path reported by the download event.
+      ---@return boolean result Whether the event refers to our download.
+      function self.is_ours(local_file)
+        if not self.current or type(local_file) ~= "string" then return false end
+
+        return ___.fd.fix_path(local_file) == self.current.target
+      end
+
+      --- Removes the temporary file holding the current download, if any.
+      --- Safe to call more than once.
+      function self.discard_temp()
+        local current = self.current
+        if not current then return end
+
+        if ___.fd.file_exists(current.target) then ___.fd.rmfile(current.target) end
+
+        self.current = nil
+      end
+
+      --- Removes the registered event handlers and tears down the queue.
+      --- Deletes the named sysInstallPackage, sysDownloadDone and sysDownloadError
+      --- handlers, discards any temporary download, and clears the handler name
+      --- and queue.
       function self.clean_up()
+        self.discard_temp()
+
         deleteNamedEventHandler("glu", self.handler_name)
+        deleteNamedEventHandler("glu", self.handler_name .. "_download_done")
         deleteNamedEventHandler("glu", self.handler_name .. "_download_error")
         self.handler_name = nil
         self.queue = nil
       end
 
+      --- Begins executing the queue.
+      --- Executes the queue if it exists, otherwise returns a not-found error.
+      ---
+      ---@return any|nil result The result of the queue execution, or nil when the queue is not found.
+      ---@return string? err The error message "Queue not found" when the queue is missing.
       function self.start()
         if not self.queue then
           return nil, "Queue not found"
@@ -1859,15 +1834,16 @@ local FdClass = Glu.glass.register({
     ---
     --- If the directory is required and does not exist, nil is returned.
     ---
-    --- @example
+    ---@example
     --- ```lua
     --- fd.dir_file("path/to/file.txt")
     --- -- "path/to", "file.txt"
     --- ```
     ---
-    --- @param path string - The path to split.
-    --- @param dir_required boolean - Whether the directory is required (Optional. Default is false).
-    --- @return string|nil,string|nil - A table with the directory and file, or nil if the path is invalid.
+    ---@param path string The path to split.
+    ---@param dir_required boolean Whether the directory is required (Optional. Default is false).
+    ---@return string|nil dir The directory portion, or nil if the path is invalid.
+    ---@return string|nil file The file portion, or nil if the path is invalid.
     function self.dir_file(path, dir_required)
       ___.v.type(path, "string", 1, false)
       ___.v.type(dir_required, "boolean", 2, true)
@@ -1890,6 +1866,21 @@ local FdClass = Glu.glass.register({
       return dir, file
     end
 
+    --- Splits a path into its root, directory, and file components.
+    --- The root is determined first, then the remainder is split into directory
+    --- and file. If the root or directory cannot be determined, all return values
+    --- are nil.
+    ---
+    ---@example
+    --- ```lua
+    --- fd.root_dir_file("c:/path/to/file.txt")
+    --- -- "c:", "/path/to", "file.txt"
+    --- ```
+    ---
+    ---@param path string The path to split.
+    ---@return string|nil root The root portion, or nil if the path is invalid.
+    ---@return string|nil dir The directory portion, or nil if the path is invalid.
+    ---@return string|nil file The file portion, or nil if the path is invalid.
     function self.root_dir_file(path)
       ___.v.type(path, "string", 1, false)
 
@@ -1904,9 +1895,9 @@ local FdClass = Glu.glass.register({
     end
 
     --- Checks if a file exists.
-    --- @param path string - The path to check.
-    --- @return boolean - Whether the file exists.
-    --- @example
+    ---@param path string The path to check.
+    ---@return boolean exists Whether the file exists.
+    ---@example
     --- ```lua
     --- fd.file_exists("path/to/file.txt")
     --- -- true
@@ -1921,9 +1912,9 @@ local FdClass = Glu.glass.register({
     end
 
     --- Checks if a directory exists.
-    --- @param path string - The path to check.
-    --- @return boolean - Whether the directory exists.
-    --- @example
+    ---@param path string The path to check.
+    ---@return boolean exists Whether the directory exists.
+    ---@example
     --- ```lua
     --- fd.dir_exists("path/to/directory")
     --- -- true
@@ -1938,10 +1929,12 @@ local FdClass = Glu.glass.register({
     end
 
     --- Reads a file.
-    --- @param path string - The path to the file.
-    --- @param binary boolean - Whether the file is binary (default false).
-    --- @return ... any - The contents of the file.
-    --- @example
+    ---@param path string The path to the file.
+    ---@param binary boolean Whether the file is binary (default false).
+    ---@return string|nil data The file contents, or nil on failure.
+    ---@return string|nil error The error message, if the read failed.
+    ---@return number|nil code The error code, if the read failed.
+    ---@example
     --- ```lua
     --- fd.read_file("path/to/file.txt")
     --- -- "contents of file"
@@ -1959,13 +1952,46 @@ local FdClass = Glu.glass.register({
       return data
     end
 
+    --- Reads a file and decodes its JSON contents.
+    ---
+    --- The decoded value mirrors the JSON document's top-level type, so it may be
+    --- a table (object or array), string, number, or boolean — not only a table.
+    --- A JSON `null` decodes to the `yajl.null` sentinel (userdata), which stays
+    --- distinct from the `nil` returned on failure.
+    ---
+    ---@param path string The path to the JSON file.
+    ---@return table|string|number|boolean|userdata|nil data The decoded value, or nil if the file is missing, unreadable, or contains invalid JSON.
+    ---@return string|nil error The error message: "No such file" when missing, the read error when unreadable, or the parser error when the JSON is malformed.
+    ---@example
+    --- ```lua
+    --- fd.read_json("path/to/file.json")
+    --- -- { key = "value" }
+    --- ```
+    function self.read_json(path)
+      ___.v.type(path, "string", 1, false)
+
+      if not self.file_exists(path) then
+        return nil, "No such file '" .. path .. "'"
+      end
+
+      local data, err = self.read_file(path)
+
+      if not data then return nil, err end
+
+      local ok, result = pcall(yajl.to_value, data)
+
+      if not ok then return nil, result end
+
+      return result, nil
+    end
+
     --- Writes to a file.
-    --- @param path string - The path to the file.
-    --- @param data string - The data to write to the file.
-    --- @param overwrite boolean - Whether to overwrite the file (default false).
-    --- @param binary boolean - Whether the file is binary (default false).
-    --- @return string|table - The path to the file or nil, a table with the error and code, or the attributes of the file.
-    --- @example
+    ---@param path string The path to the file.
+    ---@param data string The data to write to the file.
+    ---@param overwrite boolean Whether to overwrite the file (default false).
+    ---@param binary boolean Whether the file is binary (default false).
+    ---@return string|table path The path to the file or nil, a table with the error and code, or the attributes of the file.
+    ---@example
     --- ```lua
     --- fd.write_file("path/to/file.txt", "contents of file")
     --- -- "path/to/file.txt", "contents of file", nil
@@ -1991,9 +2017,10 @@ local FdClass = Glu.glass.register({
     end
 
     --- Fixes a path to use forward slashes.
-    --- @param path string - The path to fix.
-    --- @return string, number - The fixed path and the number of replacements made.
-    --- @example
+    ---@param path string The path to fix.
+    ---@return string path The fixed path.
+    ---@return number num The number of replacements made.
+    ---@example
     --- ```lua
     --- fd.fix_path("path\\to\\file.txt")
     --- -- "path/to/file.txt"
@@ -2009,6 +2036,11 @@ local FdClass = Glu.glass.register({
       return result, num
     end
 
+    --- Determines which path separator a path uses.
+    --- Checks for a forward slash first, then a backslash, returning the first found.
+    ---
+    ---@param path string The path to inspect.
+    ---@return string|nil sep The path separator ("/" or "\\"), or nil if none is found.
     function self.determine_path_separator(path)
       ___.v.type(path, "string", 1, false)
 
@@ -2019,18 +2051,23 @@ local FdClass = Glu.glass.register({
       return nil
     end
 
+    --- Checks whether a string looks like a path by containing a path separator.
+    --- This does not verify that the path exists on disk.
+    ---
+    ---@param path string The path string to check.
+    ---@return boolean is_valid Whether the string contains a recognised path separator.
     function self.valid_path_string(path)
       ___.v.type(path, "string", 1, false)
 
       return self.determine_path_separator(path) ~= nil
     end
 
-    function self.valid_path_table(paths)
-      ___.v.indexed(paths, "table", 1, false)
-
-      return ___.table.all(paths, self.valid_path_string)
-    end
-
+    --- Checks whether the argument is a valid path string or a table of valid path strings.
+    --- The argument is first normalised to a table, then validated as either a
+    --- single path string or a table of path strings.
+    ---
+    ---@param path string|table The path string, or table of path strings, to check.
+    ---@return boolean is_valid Whether the argument is a valid path or table of paths.
     function self.valid_path_table_or_string(path)
       path = ___.table.n_cast(path)
 
@@ -2045,18 +2082,32 @@ local FdClass = Glu.glass.register({
       return false
     end
 
+    --- Checks whether a path refers to an existing directory or file.
+    ---
+    ---@param path string The path to check.
+    ---@return boolean exists Whether the path exists as a directory or a file.
     function self.valid_path(path)
       ___.v.type(path, "string", 1, false)
 
       return self.dir_exists(path) or self.file_exists(path)
     end
 
+    --- Checks whether every entry in a table is a valid existing path.
+    --- Each element must be a path that exists as either a directory or a file.
+    ---
+    ---@param paths table The uniform table of path strings to check.
+    ---@return boolean is_valid Whether all paths in the table are valid existing paths.
     function self.valid_paths(paths)
       ___.v.n_uniform(paths, "string", 1, false)
 
       return ___.table.all(paths, self.valid_path)
     end
 
+    --- Checks whether every entry in a table is a valid existing path.
+    --- Each element must be a path that exists as either a directory or a file.
+    ---
+    ---@param paths table The indexed table of path strings to check.
+    ---@return boolean is_valid Whether all paths in the table are valid existing paths.
     function self.valid_path_table(paths)
       ___.v.indexed(paths, "table", 1, false)
 
@@ -2064,9 +2115,11 @@ local FdClass = Glu.glass.register({
     end
 
     --- Ensures that a directory exists.
-    --- @param path string - The path to the directory.
-    --- @return table|nil, string|nil, number|nil - A table of created directories, the error message, and the error code.
-    --- @example
+    ---@param path string The path to the directory.
+    ---@return table|nil created A table of created directories, or nil on failure.
+    ---@return string|nil err The error message, if the operation failed.
+    ---@return number|nil code The error code, if the operation failed.
+    ---@example
     --- ```lua
     --- fd.assure_dir("path/to/directory")
     --- ```
@@ -2101,9 +2154,9 @@ local FdClass = Glu.glass.register({
     end
 
     --- Determines the root of a path.
-    --- @param path string - The path to determine the root of.
-    --- @return string|nil - The root of the path, or nil if the path is invalid.
-    --- @example
+    ---@param path string The path to determine the root of.
+    ---@return string|nil root The root of the path, or nil if the path is invalid.
+    ---@example
     --- ```lua
     --- fd.determine_root("c:\\test\\moo")
     --- -- "c:"
@@ -2122,9 +2175,10 @@ local FdClass = Glu.glass.register({
     end
 
     --- Removes a file.
-    --- @param path string - The path to the file.
-    --- @return boolean|nil, nil|string - Whether the file was removed, or nil and the error message.
-    --- @example
+    ---@param path string The path to the file.
+    ---@return boolean|nil removed Whether the file was removed, or nil on failure.
+    ---@return string|nil err The error message, if the removal failed.
+    ---@example
     --- ```lua
     --- fd.rmfile("path/to/file.txt")
     --- -- true
@@ -2136,9 +2190,10 @@ local FdClass = Glu.glass.register({
     end
 
     --- Removes a directory.
-    --- @param path string - The path to the directory.
-    --- @return boolean|nil, nil|string - Whether the directory was removed, or nil and the error message.
-    --- @example
+    ---@param path string The path to the directory.
+    ---@return boolean|nil removed Whether the directory was removed, or nil on failure.
+    ---@return string|nil err The error message, if the removal failed.
+    ---@example
     --- ```lua
     --- fd.rmdir("path/to/directory")
     --- -- true
@@ -2150,9 +2205,9 @@ local FdClass = Glu.glass.register({
     end
 
     --- Checks if a directory is empty.
-    --- @param path string - The path to the directory.
-    --- @return boolean - Whether the directory is empty.
-    --- @example
+    ---@param path string The path to the directory.
+    ---@return boolean is_empty Whether the directory is empty.
+    ---@example
     --- ```lua
     --- fd.dir_empty("/path/to/directory")
     --- -- true
@@ -2162,10 +2217,10 @@ local FdClass = Glu.glass.register({
     end
 
     --- Gets the files in a directory.
-    --- @param path string - The path to the directory.
-    --- @param include_dots boolean - Whether to include the "." and ".." directories (default false).
-    --- @return table - A table of files in the directory.
-    --- @example
+    ---@param path string The path to the directory.
+    ---@param include_dots boolean Whether to include the "." and ".." directories (default false).
+    ---@return table result A table of files in the directory.
+    ---@example
     --- ```lua
     --- fd.get_dir("/path/to/directory")
     --- -- {"file1", "file2", "file3"}
@@ -2196,6 +2251,12 @@ local FdClass = Glu.glass.register({
       return result
     end
 
+    --- Creates a unique temporary directory under the Mudlet home directory.
+    --- The directory is placed at `<MudletHomeDir>/tmp/<id>` and created on disk.
+    ---
+    ---@return string|nil dir The path to the created temporary directory, or nil on failure.
+    ---@return string|nil err The error message, if creation failed.
+    ---@return number|nil code The error code, if creation failed.
     function self.temp_dir()
       local dir = getMudletHomeDir() .. "/tmp/" .. ___.id()
 
@@ -2261,16 +2322,34 @@ local FuncClass = Glu.glass.register({
   class_name = "FuncClass",
   dependencies = {},
   setup = function(___, self)
+    --- Schedules a function to run after a delay.
+    --- Wraps Mudlet's `tempTimer`, forwarding any extra arguments to the function when it fires.
+    ---
+    ---@param func function The function to run after the delay.
+    ---@param delay number The delay in seconds before the function runs.
+    ---@param ... any Additional arguments passed to the function when it runs.
+    ---@return number timer_id The timer id returned by tempTimer.
+    ---@example
+    --- ```lua
+    --- func.delay(function() echo("hi") end, 5)
+    --- ```
     function self.delay(func, delay, ...)
       ___.v.type(func, "function", 1, false)
       ___.v.type(delay, "number", 2, false)
 
+      local args = { ... }
       ---@diagnostic disable-next-line: return-type-mismatch
-      return tempTimer(delay, function(...)
-        func(...)
+      return tempTimer(delay, function()
+        func(unpack(args))
       end)
     end
 
+    --- Wraps a function with another function.
+    --- Returns a new function that calls the wrapper with the original function as its first argument, followed by any arguments passed to the new function.
+    ---
+    ---@param func function The function to be wrapped.
+    ---@param wrapper function The wrapper function, which receives `func` followed by the call arguments.
+    ---@return function wrapped The wrapped function.
     function self.wrap(func, wrapper)
       --- ```lua
       --- local becho = function.wrap(cecho, function(func, text)
@@ -2288,6 +2367,18 @@ local FuncClass = Glu.glass.register({
       end
     end
 
+    --- Repeatedly runs a function on an interval.
+    --- Runs the function up to `times` times, waiting `interval` seconds between each run, forwarding any extra arguments to the function on each run.
+    ---
+    ---@param func function The function to run repeatedly.
+    ---@param interval number The interval in seconds between runs. Defaults to 1.
+    ---@param times number The number of times to run the function. Defaults to 1.
+    ---@param ... any Additional arguments passed to the function on each run.
+    ---@return nil result
+    ---@example
+    --- ```lua
+    --- func.repeater(function() echo("tick\n") end, 2, 3)
+    --- ```
     function self.repeater(func, interval, times, ...)
       ___.v.type(func, "function", 1, false)
       ___.v.type(interval, "number", 2, true)
@@ -2296,15 +2387,16 @@ local FuncClass = Glu.glass.register({
       interval = interval or 1
       times = times or 1
 
+      local args = { ... }
       local count = 0
-      local function _repeat(...)
+      local function _repeat()
         if count < times then
-          func(...)
+          func(unpack(args))
           count = count + 1
-          tempTimer(interval, _repeat, ...)
+          tempTimer(interval, _repeat)
         end
       end
-      _repeat(...)
+      _repeat()
     end
   end
 })
@@ -2333,10 +2425,10 @@ local HttpClass = Glu.glass.register({
     --- file, however, this is a bit more convenient as it does some checking
     --- for you.
     ---
-    --- @param options table - The options for the request.
-    --- @param cb function - The callback function.
-    --- @return table - The HTTP request object.
-    --- @example
+    ---@param options table The options for the request.
+    ---@param cb function The callback function.
+    ---@return table request The HTTP request object.
+    ---@example
     --- ```lua
     --- http.download({
     ---   url = "http://example.com/file.txt",
@@ -2356,10 +2448,10 @@ local HttpClass = Glu.glass.register({
     --- - `url` (`string`) - The URL to request.
     --- - `headers` (`table`) - The headers to send with the request.
     ---
-    --- @param options table - The options for the request.
-    --- @param cb function - The callback function.
-    --- @return table - The HTTP request object.
-    --- @example
+    ---@param options table The options for the request.
+    ---@param cb function The callback function.
+    ---@return table request The HTTP request object.
+    ---@example
     --- ```lua
     --- http.get({
     ---   url = "http://example.com/file.txt"
@@ -2377,10 +2469,10 @@ local HttpClass = Glu.glass.register({
     --- - `url` (`string`) - The URL to request.
     --- - `headers` (`table`) - The headers to send with the request.
     ---
-    --- @param options table - The options for the request.
-    --- @param cb function - The callback function.
-    --- @return table - The HTTP request object.
-    --- @example
+    ---@param options table The options for the request.
+    ---@param cb function The callback function.
+    ---@return table request The HTTP request object.
+    ---@example
     --- ```lua
     --- http.post({
     ---   url = "http://example.com/file.txt"
@@ -2398,10 +2490,10 @@ local HttpClass = Glu.glass.register({
     --- - `url` (`string`) - The URL to request.
     --- - `headers` (`table`) - The headers to send with the request.
     ---
-    --- @param options table - The options for the request.
-    --- @param cb function - The callback function.
-    --- @return table - The HTTP request object.
-    --- @example
+    ---@param options table The options for the request.
+    ---@param cb function The callback function.
+    ---@return table request The HTTP request object.
+    ---@example
     --- ```lua
     --- http.put({
     ---   url = "http://example.com/file.txt"
@@ -2419,10 +2511,10 @@ local HttpClass = Glu.glass.register({
     --- - `url` (`string`) - The URL to request.
     --- - `headers` (`table`) - The headers to send with the request.
     ---
-    --- @param options table - The options for the request.
-    --- @param cb function - The callback function.
-    --- @return table - The HTTP request object.
-    --- @example
+    ---@param options table The options for the request.
+    ---@param cb function The callback function.
+    ---@return table request The HTTP request object.
+    ---@example
     --- ```lua
     --- http.delete({
     ---   url = "http://example.com/file.txt"
@@ -2442,10 +2534,10 @@ local HttpClass = Glu.glass.register({
     --- - `method` (`string`) - The HTTP method to use.
     --- - `headers` (`table`) - The headers to send with the request.
     ---
-    --- @param options table - The options for the request.
-    --- @param cb function - The callback function.
-    --- @return table - The HTTP request object.
-    --- @example
+    ---@param options table The options for the request.
+    ---@param cb function The callback function.
+    ---@return table request The HTTP request object.
+    ---@example
     --- ```lua
     --- http.request({
     ---   url = "http://example.com/file.txt"
@@ -2469,6 +2561,10 @@ local HttpClass = Glu.glass.register({
       return request
     end
 
+    --- Removes a tracked HTTP request from the request list by its id.
+    ---
+    ---@param id string The id of the request to remove.
+    ---@return nil result Nothing.
     function self.delete_request(id)
       for i = 1, #requests do
         if requests[i].id == id then
@@ -2478,6 +2574,10 @@ local HttpClass = Glu.glass.register({
       end
     end
 
+    --- Looks up a tracked HTTP request by its id.
+    ---
+    ---@param id string The id of the request to find.
+    ---@return table|nil request The matching request, or nil if none is found.
     function self.find_request(id)
       for _, request in ipairs(requests) do
         if request.id == id then
@@ -2498,6 +2598,18 @@ local HttpRequestClass = Glu.glass.register({
   setup = function(___, self, options)
     self.options = options
 
+    --- Performs the HTTP request described by `self.options`.
+    --- Registers Mudlet named event handlers for the matching sysHttp
+    --- Done/Error events, then invokes the appropriate global HTTP function
+    --- (`getHTTP`, `postHTTP`, `customHTTP`, etc.). On completion it builds an
+    --- `http_response`, writes the body to `saveTo` when requested, invokes the
+    --- callback, and cleans up its event handlers.
+    ---
+    ---@return object request The request object.
+    ---@example
+    --- ```lua
+    --- request.execute()
+    --- ```
     function self.execute()
       local owner = self.container
 
@@ -2625,10 +2737,10 @@ local NumberClass = Glu.glass.register({
   setup = function(___, self)
     --- Rounds a number to a specified number of decimal places.
     ---
-    --- @param num number - The number to round.
-    --- @param digits number - The number of digits to round to. (Optional. Default is 0.)
-    --- @return number - The rounded number.
-    --- @example
+    ---@param num number The number to round.
+    ---@param digits number The number of digits to round to. (Optional. Default is 0.)
+    ---@return number rounded The rounded number.
+    ---@example
     --- ```lua
     --- number.round(3.14159, 2)
     --- -- 3.14
@@ -2644,11 +2756,11 @@ local NumberClass = Glu.glass.register({
     end
 
     --- Clamps a number within a range.
-    --- @param num number - The number to clamp.
-    --- @param min number - The minimum allowed value.
-    --- @param max number - The maximum allowed value.
-    --- @return number - The clamped number.
-    --- @example
+    ---@param num number The number to clamp.
+    ---@param min number The minimum allowed value.
+    ---@param max number The maximum allowed value.
+    ---@return number clamped The clamped number.
+    ---@example
     --- ```lua
     --- number.clamp(10, 1, 100)
     --- -- 10
@@ -2662,11 +2774,11 @@ local NumberClass = Glu.glass.register({
     end
 
     --- Linearly interpolates between two numbers.
-    --- @param a number - The starting value.
-    --- @param b number - The ending value.
-    --- @param t number - The interpolation factor (between 0 and 1).
-    --- @return number - The interpolated value.
-    --- @example
+    ---@param a number The starting value.
+    ---@param b number The ending value.
+    ---@param t number The interpolation factor (between 0 and 1).
+    ---@return number interpolated The interpolated value.
+    ---@example
     --- ```lua
     --- number.lerp(0, 100, 0.5)
     --- -- 50
@@ -2681,11 +2793,11 @@ local NumberClass = Glu.glass.register({
     end
 
     --- Smoothly interpolates between two numbers using a cubic function.
-    --- @param start number - The starting value.
-    --- @param end_val number - The ending value.
-    --- @param t number - The interpolation factor (between 0 and 1).
-    --- @return number - The interpolated value.
-    --- @example
+    ---@param start number The starting value.
+    ---@param end_val number The ending value.
+    ---@param t number The interpolation factor (between 0 and 1).
+    ---@return number interpolated The interpolated value.
+    ---@example
     --- ```lua
     --- number.lerp_smooth(0, 100, 0.5)
     --- -- 50
@@ -2702,11 +2814,11 @@ local NumberClass = Glu.glass.register({
     end
 
     --- Smoothly interpolates between two numbers using a quintic function.
-    --- @param start number - The starting value.
-    --- @param end_val number - The ending value.
-    --- @param t number - The interpolation factor (between 0 and 1).
-    --- @return number - The interpolated value.
-    --- @example
+    ---@param start number The starting value.
+    ---@param end_val number The ending value.
+    ---@param t number The interpolation factor (between 0 and 1).
+    ---@return number interpolated The interpolated value.
+    ---@example
     --- ```lua
     function self.lerp_smoother(start, end_val, t)
       ___.v.type(start, "number", 1, false)
@@ -2720,11 +2832,11 @@ local NumberClass = Glu.glass.register({
     end
 
     --- Eases a number in towards a target value.
-    --- @param start number - The starting value.
-    --- @param end_val number - The target value.
-    --- @param t number - The interpolation factor (between 0 and 1).
-    --- @return number - The eased value.
-    --- @example
+    ---@param start number The starting value.
+    ---@param end_val number The target value.
+    ---@param t number The interpolation factor (between 0 and 1).
+    ---@return number eased The eased value.
+    ---@example
     --- ```lua
     function self.lerp_ease_in(start, end_val, t)
       ___.v.type(start, "number", 1, false)
@@ -2738,11 +2850,11 @@ local NumberClass = Glu.glass.register({
     end
 
     --- Eases a number out towards a target value.
-    --- @param start number - The starting value.
-    --- @param end_val number - The target value.
-    --- @param t number - The interpolation factor (between 0 and 1).
-    --- @return number - The eased value.
-    --- @example
+    ---@param start number The starting value.
+    ---@param end_val number The target value.
+    ---@param t number The interpolation factor (between 0 and 1).
+    ---@return number eased The eased value.
+    ---@example
     --- ```lua
     function self.lerp_ease_out(start, end_val, t)
       ___.v.type(start, "number", 1, false)
@@ -2756,13 +2868,13 @@ local NumberClass = Glu.glass.register({
     end
 
     --- Maps a number from one range to another.
-    --- @param value number - The input number.
-    --- @param in_min number - The minimum of the input range.
-    --- @param in_max number - The maximum of the input range.
-    --- @param out_min number - The minimum of the output range.
-    --- @param out_max number - The maximum of the output range.
-    --- @return number - The mapped number.
-    --- @example
+    ---@param value number The input number.
+    ---@param in_min number The minimum of the input range.
+    ---@param in_max number The maximum of the input range.
+    ---@param out_min number The minimum of the output range.
+    ---@param out_max number The maximum of the output range.
+    ---@return number mapped The mapped number.
+    ---@example
     --- ```lua
     --- number.map(50, 0, 100, 0, 100)
     --- -- 50
@@ -2778,9 +2890,9 @@ local NumberClass = Glu.glass.register({
     end
 
     --- Tests a number to see if it is positive, negative, or zero.
-    --- @param num number - The number to check.
-    --- @return boolean - True if the number is positive, false otherwise.
-    --- @example
+    ---@param num number The number to check.
+    ---@return boolean is_positive True if the number is positive, false otherwise.
+    ---@example
     --- ```lua
     --- number.positive(10)
     --- -- true
@@ -2792,11 +2904,11 @@ local NumberClass = Glu.glass.register({
     end
 
     --- Checks if two numbers are approximately equal within a percentage tolerance.
-    --- @param a number - The first number.
-    --- @param b number - The second number.
-    --- @param percent_tolerance number - The percentage allowed difference (default is 5%).
-    --- @return boolean - True if the numbers are approximately equal, false otherwise.
-    --- @example
+    ---@param a number The first number.
+    ---@param b number The second number.
+    ---@param percent_tolerance number The percentage allowed difference (default is 5%).
+    ---@return boolean ok True if the numbers are approximately equal, false otherwise.
+    ---@example
     --- ```lua
     --- number.is_approximate(10, 11, 10)
     --- -- true
@@ -2812,9 +2924,9 @@ local NumberClass = Glu.glass.register({
     end
 
     --- Returns the minimum value in a list of numbers or a table.
-    --- @param ... number|table[] - Either a list of numbers or a single table of numbers.
-    --- @return number - The minimum value.
-    --- @example
+    ---@param ... number|table[] Either a list of numbers or a single table of numbers.
+    ---@return number result The minimum value.
+    ---@example
     --- ```lua
     --- number.min(1, 2, 3)
     --- -- 1
@@ -2833,9 +2945,9 @@ local NumberClass = Glu.glass.register({
     end
 
     --- Returns the maximum value in a list of numbers or a table of numbers.
-    --- @param ... number|number[] - Either a list of numbers or a single table of numbers.
-    --- @return number - The maximum value.
-    --- @example
+    ---@param ... number|number[] Either a list of numbers or a single table of numbers.
+    ---@return number result The maximum value.
+    ---@example
     --- ```lua
     --- number.max(1, 2, 3)
     --- -- 3
@@ -2854,9 +2966,9 @@ local NumberClass = Glu.glass.register({
     end
 
     --- Sums a list of numbers.
-    --- @param ... number[] - The numbers to sum.
-    --- @return number - The sum of the numbers.
-    --- @example
+    ---@param ... number[] The numbers to sum.
+    ---@return number sum The sum of the numbers.
+    ---@example
     --- ```lua
     --- number.sum(1, 2, 3)
     --- -- 6
@@ -2868,10 +2980,10 @@ local NumberClass = Glu.glass.register({
     end
 
     --- Returns a random number between a minimum and maximum value.
-    --- @param min number - The minimum value.
-    --- @param max number - The maximum value.
-    --- @return number - The random number.
-    --- @example
+    ---@param min number The minimum value.
+    ---@param max number The maximum value.
+    ---@return number random The random number.
+    ---@example
     --- ```lua
     --- number.random_clamp(0, 100)
     --- -- 50
@@ -2884,11 +2996,11 @@ local NumberClass = Glu.glass.register({
     end
 
     --- Checks if a number is between two values (inclusive)
-    --- @param num number - The number to check
-    --- @param min number - The minimum value
-    --- @param max number - The maximum value
-    --- @return boolean - True if the number is between min and max
-    --- @example
+    ---@param num number The number to check
+    ---@param min number The minimum value
+    ---@param max number The maximum value
+    ---@return boolean is_between True if the number is between min and max
+    ---@example
     --- ```lua
     --- number.is_between(5, 1, 10)
     --- -- true
@@ -2901,9 +3013,9 @@ local NumberClass = Glu.glass.register({
       return num >= min and num <= max
     end
 
-    --- @param num number - The number to check
-    --- @return number - The sign (-1, 0, or 1)
-    --- @example
+    ---@param num number The number to check
+    ---@return number sign The sign (-1, 0, or 1)
+    ---@example
     --- ```lua
     --- number.sign(-5)
     --- -- -1
@@ -2915,9 +3027,9 @@ local NumberClass = Glu.glass.register({
     end
 
     --- Calculates the average (mean) of a list of numbers
-    --- @param ... number|number[] - Either a list of numbers or a single table of numbers
-    --- @return number - The average value
-    --- @example
+    ---@param ... number|number[] Either a list of numbers or a single table of numbers
+    ---@return number average The average value
+    ---@example
     --- ```lua
     --- number.average(1, 2, 3)
     --- -- 2
@@ -2929,10 +3041,10 @@ local NumberClass = Glu.glass.register({
     end
 
     --- Constrains a number to a certain precision
-    --- @param num number - The number to constrain
-    --- @param precision number - The precision (e.g., 0.1, 0.01, etc.)
-    --- @return number - The constrained number
-    --- @example
+    ---@param num number The number to constrain
+    ---@param precision number The precision (e.g., 0.1, 0.01, etc.)
+    ---@return number constrained The constrained number
+    ---@example
     --- ```lua
     --- number.constrain(3.14159, 0.01)
     --- -- 3.14
@@ -2945,11 +3057,11 @@ local NumberClass = Glu.glass.register({
     end
 
     --- Calculates what percentage one number is of another
-    --- @param value number - The current value
-    --- @param total number - The total value
-    --- @param round_digits? number - Optional number of decimal places to round to
-    --- @return number - The percentage
-    --- @example
+    ---@param value number The current value
+    ---@param total number The total value
+    ---@param round_digits? number Optional number of decimal places to round to
+    ---@return number result The percentage
+    ---@example
     --- ```lua
     --- number.percent_of(25, 20)
     --- -- 5
@@ -2967,11 +3079,11 @@ local NumberClass = Glu.glass.register({
     end
 
     --- Calculates what number is a certain percentage of another
-    --- @param percent number - The percentage
-    --- @param total number - The total value
-    --- @param round_digits? number - Optional number of decimal places to round to
-    --- @return number - The resulting value
-    --- @example
+    ---@param percent number The percentage
+    ---@param total number The total value
+    ---@param round_digits? number Optional number of decimal places to round to
+    ---@return number result The resulting value
+    ---@example
     --- ```lua
     --- number.percent(25, 100)
     --- -- 25
@@ -2991,11 +3103,11 @@ local NumberClass = Glu.glass.register({
     end
 
     --- Normalizes a number to a 0-1 range
-    --- @param num number - The number to normalize
-    --- @param min number - The minimum value of the range
-    --- @param max number - The maximum value of the range
-    --- @return number - The normalized value (0-1)
-    --- @example
+    ---@param num number The number to normalize
+    ---@param min number The minimum value of the range
+    ---@param max number The maximum value of the range
+    ---@return number normalized The normalized value (0-1)
+    ---@example
     --- ```lua
     --- number.normalize(50, 0, 100)
     --- -- 0.5
@@ -3005,9 +3117,9 @@ local NumberClass = Glu.glass.register({
     end
 
     --- Calculates the arithmetic mean of a list of numbers
-    --- @param ... number|number[] - Either a list of numbers or a single table of numbers
-    --- @return number - The arithmetic mean
-    --- @example
+    ---@param ... number|number[] Either a list of numbers or a single table of numbers
+    ---@return number mean The arithmetic mean
+    ---@example
     --- ```lua
     --- number.mean(1, 2, 3)
     --- -- 2
@@ -3044,11 +3156,11 @@ local PreferencesClass = Glu.glass.register({
     --- Loads preferences from a file. If a package name is provided, it will be
     --- used to construct the path. Otherwise, the file will be loaded from the
     --- profile directory.
-    --- @param pkg string|nil - The package name. (Optional. Default is nil.)
-    --- @param file string - The file name.
-    --- @param defaults table - A table of default values for those which are missing.
-    --- @return table - The loaded preferences.
-    --- @example
+    ---@param pkg string|nil The package name. (Optional. Default is nil.)
+    ---@param file string The file name.
+    ---@param defaults table A table of default values for those which are missing.
+    ---@return table prefs The loaded preferences.
+    ---@example
     --- ```lua
     --- -- Load preferences from the "my_package" package
     --- preferences.load_prefs("my_package", "settings.json", {
@@ -3080,10 +3192,10 @@ local PreferencesClass = Glu.glass.register({
     --- Saves preferences to a file. If a package name is provided, it will be
     --- used to construct the path. Otherwise, the file will be saved to the
     --- profile directory.
-    --- @param pkg string|nil - The package name. (Optional. Default is nil.)
-    --- @param file string - The file name.
-    --- @param prefs table - The preferences to save.
-    --- @example
+    ---@param pkg string|nil The package name. (Optional. Default is nil.)
+    ---@param file string The file name.
+    ---@param prefs table The preferences to save.
+    ---@example
     --- ```lua
     --- preferences.save_prefs("my_package", "settings.json", {
     ---   default_value = 1,
@@ -3119,10 +3231,10 @@ local QueueClass = Glu.glass.register({
     --- is available both through the queue object and the functions from this
     --- module. The ID is in the form of a v4 UUID.
     ---
-    --- @param funcs table? - A table of functions to be added to the queue
-    --- @return table - The new queue object
+    ---@param funcs table? A table of functions to be added to the queue
+    ---@return table queue The new queue object
     ---
-    --- @example
+    ---@example
     --- ```lua
     --- local queue = queue.new(parent).new({})
     --- ```
@@ -3140,8 +3252,8 @@ local QueueClass = Glu.glass.register({
     --- Retrieves a queue object by its identifier. If no queue is found, nil is
     --- returned, otherwise the queue object is returned.
     ---
-    --- @param id string - The identifier of the queue to retrieve
-    --- @return table|nil - The queue object or nil if not found
+    ---@param id string The identifier of the queue to retrieve
+    ---@return table|nil queue The queue object or nil if not found
     function self.get(id)
       ___.v.type(id, "string", 1, false)
 
@@ -3153,9 +3265,9 @@ local QueueClass = Glu.glass.register({
 
     --- Add a function to the end of a queue by its identifier.
     ---
-    --- @param id string - The identifier of the queue to add the function to
-    --- @param f function - The function to add to the queue
-    --- @example
+    ---@param id string The identifier of the queue to add the function to
+    ---@param f function The function to add to the queue
+    ---@example
     --- ```lua
     --- queue:push("2ce02d6a-36a8-45ab-a78e-7f909427e1d1",
     ---   function() print("Hello, world!")
@@ -3171,6 +3283,11 @@ local QueueClass = Glu.glass.register({
       return q.push(f)
     end
 
+    --- Removes and returns the next item from the named queue.
+    ---
+    ---@param id string The identifier of the queue to shift from.
+    ---@return any item The next item removed from the queue, or nil on failure.
+    ---@return string err An error message if the queue could not be found.
     function self.shift(id)
       ___.v.type(id, "string", 1, false)
 
@@ -3195,15 +3312,28 @@ local QueueStackClass = Glu.glass.register({
     self.stack = funcs
     self.id = ___.id()
 
+    --- Pushes a function onto the end of the queue.
+    ---
+    ---@param f function The task function to add to the queue.
+    ---@return number length The new length of the queue.
     function self.push(f)
       ___.v.type(f, "function", 1, false)
       return ___.table.push(self.stack, f)
     end
 
+    --- Removes and returns the first task from the front of the queue.
+    ---
+    ---@return function|nil task The shifted task function, or nil if the queue is empty.
     function self.shift()
       return ___.table.shift(self.stack)
     end
 
+    --- Shifts the next task off the queue and executes it with the provided arguments.
+    ---
+    ---@param ... any The arguments to pass to the task function.
+    ---@return QueueStackClass self The queue object.
+    ---@return number|nil count The number of remaining tasks, or nil when the queue is empty.
+    ---@return any ... Any results returned by the executed task.
     function self.execute(...)
       -- Shift the next task off the queue
       local task = self.shift()
@@ -3255,9 +3385,9 @@ local SameClass = Glu.glass.register({
   dependencies = { "table" },
   setup = function(___, self)
     --- Checks if two values are the same, including special cases for NaN and zero.
-    --- @param value1 any - The first value to compare.
-    --- @param value2 any - The second value to compare.
-    --- @return boolean - True if the values are the same, false otherwise.
+    ---@param value1 any The first value to compare.
+    ---@param value2 any The second value to compare.
+    ---@return boolean same True if the values are the same, false otherwise.
     function self.value_zero(value1, value2)
       ___.v.type(value1, "any", 1, false)
       ___.v.type(value2, "any", 2, false)
@@ -3286,9 +3416,9 @@ local SameClass = Glu.glass.register({
     end
 
     --- Checks if two values are the same, including special cases for NaN and zero.
-    --- @param value1 any - The first value to compare.
-    --- @param value2 any - The second value to compare.
-    --- @return boolean - True if the values are the same, false otherwise.
+    ---@param value1 any The first value to compare.
+    ---@param value2 any The second value to compare.
+    ---@return boolean same True if the values are the same, false otherwise.
     function self.value(value1, value2)
       ___.v.type(value1, "any", 1, false)
       ___.v.type(value2, "any", 2, false)
@@ -3326,9 +3456,9 @@ local StringClass = Glu.glass.register({
   setup = function(___, self)
     --- Capitalizes the first character of a string.
     ---
-    --- @param str string - The string to capitalize.
-    --- @return string - The capitalized string.
-    --- @example
+    ---@param str string The string to capitalize.
+    ---@return string result The capitalized string.
+    ---@example
     --- ```lua
     --- string.capitalize("hello")
     --- -- "Hello"
@@ -3343,9 +3473,9 @@ local StringClass = Glu.glass.register({
 
     --- Trims whitespace from the beginning and end of a string.
     ---
-    --- @param str string - The string to trim.
-    --- @return string - The trimmed string.
-    --- @example
+    ---@param str string The string to trim.
+    ---@return string trimmed The trimmed string.
+    ---@example
     --- ```lua
     --- string.trim("  hello  ")
     --- -- "hello"
@@ -3357,9 +3487,9 @@ local StringClass = Glu.glass.register({
 
     --- Trims whitespace from the left side of a string.
     ---
-    --- @param str string - The string to trim.
-    --- @return string - The trimmed string.
-    --- @example
+    ---@param str string The string to trim.
+    ---@return string trimmed The trimmed string.
+    ---@example
     --- ```lua
     --- string.ltrim("  hello  ")
     --- -- "hello  "
@@ -3371,9 +3501,9 @@ local StringClass = Glu.glass.register({
 
     --- Trims whitespace from the right side of a string.
     ---
-    --- @param str string - The string to trim.
-    --- @return string - The trimmed string.
-    --- @example
+    ---@param str string The string to trim.
+    ---@return string trimmed The trimmed string.
+    ---@example
     --- ```lua
     --- string.rtrim("  hello  ")
     --- -- "  hello"
@@ -3385,9 +3515,9 @@ local StringClass = Glu.glass.register({
 
     --- Strips line breaks from a string.
     ---
-    --- @param str string - The string to strip line breaks from.
-    --- @return string - The string with line breaks removed.
-    --- @example
+    ---@param str string The string to strip line breaks from.
+    ---@return string result The string with line breaks removed.
+    ---@example
     --- ```lua
     --- string.strip_linebreaks("hello\nworld")
     --- -- "helloworld"
@@ -3400,11 +3530,11 @@ local StringClass = Glu.glass.register({
 
     --- Replaces all occurrences of a pattern in a string.
     ---
-    --- @param str string - The string to replace occurrences in.
-    --- @param pattern string - The pattern to replace.
-    --- @param replacement string - The replacement string.
-    --- @return string - The string with occurrences replaced.
-    --- @example
+    ---@param str string The string to replace occurrences in.
+    ---@param pattern string The pattern to replace.
+    ---@param replacement string The replacement string.
+    ---@return string str The string with occurrences replaced.
+    ---@example
     --- ```lua
     --- string.replace("hello world", "o", "a")
     --- -- "hella warld"
@@ -3425,10 +3555,10 @@ local StringClass = Glu.glass.register({
     --- delimiter is provided, it defaults to ".", which will split the string
     --- into individual characters.
     ---
-    --- @param str string - The string to split.
-    --- @param delimiter string - The regex delimiter to split the string by.
-    --- @return table - The split string.
-    --- @example
+    ---@param str string The string to split.
+    ---@param delimiter string The regex delimiter to split the string by.
+    ---@return table parts The split string.
+    ---@example
     --- ```lua
     --- string.split("hello world")
     --- -- {"h", "e", "l", "l", "o", " ", "w", "o", "r", "l", "d"}
@@ -3459,10 +3589,10 @@ local StringClass = Glu.glass.register({
     --- Walks over a string or table, splitting the string with a PCRE regex
     --- delimiter and returning an iterator.
     ---
-    --- @param input string - The string to walk over.
-    --- @param delimiter string - The regex delimiter to split the string by.
-    --- @return function - The iterator function.
-    --- @example
+    ---@param input string The string to walk over.
+    ---@param delimiter string The regex delimiter to split the string by.
+    ---@return function iterator The iterator function.
+    ---@example
     --- ```lua
     --- for i, part in string.walk("hello world") do
     ---   print(i, part) -- prints 1=h, 2=e, 3=l, 4=l, 5=o, 6= , 7=w, 8=o, 9=r, 10=l, 11=d
@@ -3485,15 +3615,15 @@ local StringClass = Glu.glass.register({
     --- Formats a number with thousands separators and decimal places.
     --- If not specified, defaults to "," for thousands and "." for decimal.
     ---
-    --- @example
+    ---@example
     --- ```lua
     --- string.format_number(1234567.89)
     --- -- "1,234,567.89"
     --- ```
-    --- @param number string|number - The number to format (number or string)
-    --- @param thousands string - The thousands separator (optional, defaults to ",")
-    --- @param decimal string - The decimal separator (optional, defaults to ".")
-    --- @return string - The formatted number
+    ---@param number string|number The number to format (number or string)
+    ---@param thousands string The thousands separator (optional, defaults to ",")
+    ---@param decimal string The decimal separator (optional, defaults to ".")
+    ---@return string formatted The formatted number
     function self.format_number(number, thousands, decimal)
       ___.v.type(number, "number|string", 1, false)
       ___.v.type(thousands, "string", 2, true)
@@ -3537,11 +3667,11 @@ local StringClass = Glu.glass.register({
 
     --- Parses a formatted number string back to a number.
     ---
-    --- @param str string - The formatted number string.
-    --- @param thousands string - The thousands separator (optional, defaults to ",").
-    --- @param decimal string - The decimal separator (optional, defaults to ".").
-    --- @return number - The parsed number.
-    --- @example
+    ---@param str string The formatted number string.
+    ---@param thousands string The thousands separator (optional, defaults to ",").
+    ---@param decimal string The decimal separator (optional, defaults to ".").
+    ---@return number number The parsed number.
+    ---@example
     --- ```lua
     --- string.parse_formatted_number("1,234,567.89")
     --- -- 1234567.89
@@ -3569,10 +3699,10 @@ local StringClass = Glu.glass.register({
     --- Checks if a string starts with a given PCRE regex pattern.
     --- If the pattern does not start with "^", it is prepended with "^".
     ---
-    --- @param str string - The string to check.
-    --- @param start string - The pattern to check for.
-    --- @return boolean - Whether the string starts with the pattern.
-    --- @example
+    ---@param str string The string to check.
+    ---@param start string The pattern to check for.
+    ---@return boolean matched Whether the string starts with the pattern.
+    ---@example
     --- ```lua
     --- string.starts_with("hello world", "hello")
     --- -- true
@@ -3589,10 +3719,10 @@ local StringClass = Glu.glass.register({
     --- Checks if a string ends with a given PCRE regex pattern.
     --- If the pattern does not end with "$", it is appended with "$".
     ---
-    --- @param str string - The string to check.
-    --- @param ending string - The pattern to check for.
-    --- @return boolean - Whether the string ends with the pattern.
-    --- @example
+    ---@param str string The string to check.
+    ---@param ending string The pattern to check for.
+    ---@return boolean matched Whether the string ends with the pattern.
+    ---@example
     --- ```lua
     --- string.ends_with("hello world", "world")
     --- -- true
@@ -3610,10 +3740,10 @@ local StringClass = Glu.glass.register({
     --- may not start with "^" or end with "$". For those, use
     --- `string.starts_with` and `string.ends_with`.
     ---
-    --- @param str string - The string to check.
-    --- @param pattern string - The pattern to check for.
-    --- @return boolean - Whether the string contains the pattern.
-    --- @example
+    ---@param str string The string to check.
+    ---@param pattern string The pattern to check for.
+    ---@return boolean matched Whether the string contains the pattern.
+    ---@example
     --- ```lua
     --- string.contains("hello world", "world")
     --- -- true
@@ -3629,10 +3759,10 @@ local StringClass = Glu.glass.register({
 
     --- Appends a suffix to a string if it does not already end with the suffix.
     ---
-    --- @param str string - The string to append to.
-    --- @param suffix string - The suffix to append.
-    --- @return string - The string with the suffix appended.
-    --- @example
+    ---@param str string The string to append to.
+    ---@param suffix string The suffix to append.
+    ---@return string result The string with the suffix appended.
+    ---@example
     --- ```lua
     --- string.append("hello", " world")
     --- -- "hello world"
@@ -3646,10 +3776,10 @@ local StringClass = Glu.glass.register({
 
     --- Prepends a prefix to a string if it does not already start with the prefix.
     ---
-    --- @param str string - The string to prepend to.
-    --- @param prefix string - The prefix to prepend.
-    --- @return string - The string with the prefix prepended.
-    --- @example
+    ---@param str string The string to prepend to.
+    ---@param prefix string The prefix to prepend.
+    ---@return string result The string with the prefix prepended.
+    ---@example
     --- ```lua
     --- string.prepend("world", "hello ")
     --- -- "hello world"
@@ -3662,12 +3792,13 @@ local StringClass = Glu.glass.register({
     end
 
     --- Implementation of reg_assoc for Mudlet using rex PCRE support
-    --- @param text string - The text to search through
-    --- @param patterns table - The patterns to search for
-    --- @param tokens table - The tokens to replace the patterns with
-    --- @param default_token string - The default token to use if no pattern is found (optional, defaults to "")
-    --- @return table,table - A table of results and token list
-    --- @example
+    ---@param text string The text to search through
+    ---@param patterns table The patterns to search for
+    ---@param tokens table The tokens to replace the patterns with
+    ---@param default_token string The default token to use if no pattern is found (optional, defaults to "")
+    ---@return table results A table of match results.
+    ---@return table token_list The list of replacement tokens.
+    ---@example
     --- ```lua
     --- string.reg_assoc("hello world", {"hello", "world"}, {"foo", "bar"})
     --- -- {"foo", "bar"}
@@ -3720,6 +3851,15 @@ local StringClass = Glu.glass.register({
       return results, token_list
     end
 
+    --- Determines whether a single character is an alphabetic letter.
+    ---
+    ---@param char string The single character to test.
+    ---@return boolean is_alpha True if the character is a letter (a-z, A-Z).
+    ---@example
+    --- ```lua
+    --- string.is_alpha("a")
+    --- -- true
+    --- ```
     function self.is_alpha(char)
       ___.v.type(char, "string", 1, false)
       ___.v.test(#char == 1, "Expected a single character", 1)
@@ -3727,6 +3867,15 @@ local StringClass = Glu.glass.register({
       return rex.match(char, "^[a-zA-Z]$") ~= nil
     end
 
+    --- Determines whether a single character is a numeric digit.
+    ---
+    ---@param char string The single character to test.
+    ---@return boolean is_numeric True if the character is a digit (0-9).
+    ---@example
+    --- ```lua
+    --- string.is_numeric("5")
+    --- -- true
+    --- ```
     function self.is_numeric(char)
       ___.v.type(char, "string", 1, false)
       ___.v.test(#char == 1, "Expected a single character", 1)
@@ -3734,6 +3883,15 @@ local StringClass = Glu.glass.register({
       return rex.match(char, "^[0-9]$") ~= nil
     end
 
+    --- Determines whether a single character is alphanumeric.
+    ---
+    ---@param char string The single character to test.
+    ---@return boolean is_alphanumeric True if the character is a letter or digit (a-z, A-Z, 0-9).
+    ---@example
+    --- ```lua
+    --- string.is_alphanumeric("a")
+    --- -- true
+    --- ```
     function self.is_alphanumeric(char)
       ___.v.type(char, "string", 1, false)
       ___.v.test(#char == 1, "Expected a single character", 1)
@@ -3741,6 +3899,15 @@ local StringClass = Glu.glass.register({
       return rex.match(char, "^[a-zA-Z0-9]$") ~= nil
     end
 
+    --- Determines whether a single character is a whitespace character.
+    ---
+    ---@param char string The single character to test.
+    ---@return boolean is_whitespace True if the character is whitespace.
+    ---@example
+    --- ```lua
+    --- string.is_whitespace(" ")
+    --- -- true
+    --- ```
     function self.is_whitespace(char)
       ___.v.type(char, "string", 1, false)
       ___.v.test(#char == 1, "Expected a single character", 1)
@@ -3748,6 +3915,16 @@ local StringClass = Glu.glass.register({
       return rex.match(char, "^\\s$") ~= nil
     end
 
+    --- Determines whether a single character is a punctuation character, meaning
+    --- it is neither alphanumeric nor whitespace.
+    ---
+    ---@param char string The single character to test.
+    ---@return boolean is_punctuation True if the character is punctuation.
+    ---@example
+    --- ```lua
+    --- string.is_punctuation("!")
+    --- -- true
+    --- ```
     function self.is_punctuation(char)
       ___.v.type(char, "string", 1, false)
       ___.v.test(#char == 1, "Expected a single character", 1)
@@ -3755,6 +3932,15 @@ local StringClass = Glu.glass.register({
       return rex.match(char, "^[^a-zA-Z0-9\\s]$") ~= nil
     end
 
+    --- Determines whether a single character is an uppercase letter.
+    ---
+    ---@param char string The single character to test.
+    ---@return boolean is_uppercase True if the character is an uppercase letter (A-Z).
+    ---@example
+    --- ```lua
+    --- string.is_uppercase("A")
+    --- -- true
+    --- ```
     function self.is_uppercase(char)
       ___.v.type(char, "string", 1, false)
       ___.v.test(#char == 1, "Expected a single character", 1)
@@ -3762,6 +3948,15 @@ local StringClass = Glu.glass.register({
       return rex.match(char, "^[A-Z]$") ~= nil
     end
 
+    --- Determines whether a single character is a lowercase letter.
+    ---
+    ---@param char string The single character to test.
+    ---@return boolean is_lowercase True if the character is a lowercase letter (a-z).
+    ---@example
+    --- ```lua
+    --- string.is_lowercase("a")
+    --- -- true
+    --- ```
     function self.is_lowercase(char)
       ___.v.type(char, "string", 1, false)
       ___.v.test(#char == 1, "Expected a single character", 1)
@@ -3769,6 +3964,16 @@ local StringClass = Glu.glass.register({
       return rex.match(char, "^[a-z]$") ~= nil
     end
 
+    --- Splits a string into a table of alternating text and numeric chunks, where
+    --- consecutive digits are grouped together and converted to numbers.
+    ---
+    ---@param str string The string to split.
+    ---@return table result A table of string and number chunks in their original order.
+    ---@example
+    --- ```lua
+    --- string.split_natural("file42name")
+    --- -- { "file", 42, "name" }
+    --- ```
     function self.split_natural(str)
       ___.v.type(str, "string", 1, false)
 
@@ -3806,6 +4011,17 @@ local StringClass = Glu.glass.register({
       return result
     end
 
+    --- Compares two strings using natural sort order, treating embedded numbers
+    --- as numeric values rather than character sequences.
+    ---
+    ---@param a string The first string to compare.
+    ---@param b string The second string to compare.
+    ---@return boolean is_before True if `a` sorts before `b` in natural order.
+    ---@example
+    --- ```lua
+    --- string.natural_compare("item2", "item10")
+    --- -- true
+    --- ```
     function self.natural_compare(a, b)
       local a_parts = self.split_natural(a)
       local b_parts = self.split_natural(b)
@@ -3836,6 +4052,16 @@ local StringClass = Glu.glass.register({
       return #a_parts < #b_parts
     end
 
+    --- Finds the position of the first match of a pattern within a string.
+    ---
+    ---@param str string The string to search within.
+    ---@param pattern string The pattern to search for.
+    ---@return number|nil index The starting index of the first match, or nil if not found.
+    ---@example
+    --- ```lua
+    --- string.index_of("hello world", "world")
+    --- -- 7
+    --- ```
     function self.index_of(str, pattern)
       ___.v.type(str, "string", 1, false)
       ___.v.type(pattern, "string", 2, false)
@@ -3857,6 +4083,17 @@ local TableClass = Glu.glass.register({
   class_name = "TableClass",
   dependencies = {},
   setup = function(___, self)
+    --- Casts the given value(s) into an indexed table. If a single indexed
+    --- table is passed, it is returned unchanged; otherwise the arguments are
+    --- collected into a new table.
+    ---
+    ---@param ... any The value(s) to cast into an indexed table.
+    ---@return table result The resulting indexed table.
+    ---@example
+    --- ```lua
+    --- table.n_cast(1, 2, 3)
+    --- -- {1, 2, 3}
+    --- ```
     function self.n_cast(...)
       if type(...) == "table" and self.indexed(...) then
         return ...
@@ -3867,6 +4104,18 @@ local TableClass = Glu.glass.register({
 
     self.assure_indexed = self.n_cast
 
+    --- Maps each element of a table to a new value using the provided function,
+    --- preserving the original keys.
+    ---
+    ---@param t table The table to map over.
+    ---@param fn function The function called as fn(key, value, ...) for each element.
+    ---@param ... any Additional arguments passed to the mapping function.
+    ---@return table result A new table with the mapped values.
+    ---@example
+    --- ```lua
+    --- table.map({1, 2, 3}, function(k, v) return v * 2 end)
+    --- -- {2, 4, 6}
+    --- ```
     function self.map(t, fn, ...)
       ___.v.type(t, "table", 1, false)
       ___.v.type(fn, "function", 2, false)
@@ -3878,6 +4127,16 @@ local TableClass = Glu.glass.register({
       return result
     end
 
+    --- Returns an indexed table containing the values of the given table,
+    --- discarding the keys.
+    ---
+    ---@param t table The table whose values to collect.
+    ---@return table result An indexed table of the values.
+    ---@example
+    --- ```lua
+    --- table.values({a = 1, b = 2})
+    --- -- {1, 2}
+    --- ```
     function self.values(t)
       ___.v.type(t, "table", 1, false)
 
@@ -3888,6 +4147,17 @@ local TableClass = Glu.glass.register({
       return result
     end
 
+    --- Determines whether all elements of an indexed table are of the same
+    --- type.
+    ---
+    ---@param t table The indexed table to check.
+    ---@param typ string|nil The type to check against. (Optional. Default is the type of the first element.)
+    ---@return boolean is_uniform True if all elements are of the given type, otherwise false.
+    ---@example
+    --- ```lua
+    --- table.n_uniform({1, 2, 3})
+    --- -- true
+    --- ```
     function self.n_uniform(t, typ)
       ___.v.type(t, "table", 1, false)
       ___.v.indexed(t, 1, false)
@@ -3904,6 +4174,16 @@ local TableClass = Glu.glass.register({
       return true
     end
 
+    --- Returns a new indexed table containing only the distinct values of the
+    --- given indexed table, preserving their first-seen order.
+    ---
+    ---@param t table The indexed table to deduplicate.
+    ---@return table result A new indexed table of distinct values.
+    ---@example
+    --- ```lua
+    --- table.n_distinct({1, 2, 2, 3, 3, 3})
+    --- -- {1, 2, 3}
+    --- ```
     function self.n_distinct(t)
       ___.v.indexed(t, 1, false)
 
@@ -3917,12 +4197,31 @@ local TableClass = Glu.glass.register({
       return result
     end
 
+    --- Removes and returns the last element of an indexed table.
+    ---
+    ---@param t table The indexed table to pop from.
+    ---@return any removed The removed last element.
+    ---@example
+    --- ```lua
+    --- table.pop({1, 2, 3})
+    --- -- 3
+    --- ```
     function self.pop(t)
       ___.v.type(t, "table", 1, false)
       ___.v.indexed(t, 1, false)
       return table.remove(t, #t)
     end
 
+    --- Appends a value to the end of an indexed table.
+    ---
+    ---@param t table The indexed table to push onto.
+    ---@param v any The value to append.
+    ---@return number length The new length of the table.
+    ---@example
+    --- ```lua
+    --- table.push({1, 2}, 3)
+    --- -- 3
+    --- ```
     function self.push(t, v)
       ___.v.type(t, "table", 1, false)
       ___.v.type(v, "any", 2, false)
@@ -3932,6 +4231,17 @@ local TableClass = Glu.glass.register({
       return #t
     end
 
+    --- Inserts a value at the beginning of an indexed table, shifting the
+    --- existing elements up.
+    ---
+    ---@param t table The indexed table to unshift onto.
+    ---@param v any The value to insert at the front.
+    ---@return number length The new length of the table.
+    ---@example
+    --- ```lua
+    --- table.unshift({2, 3}, 1)
+    --- -- 3
+    --- ```
     function self.unshift(t, v)
       ___.v.type(t, "table", 1, false)
       ___.v.type(v, "any", 2, false)
@@ -3941,12 +4251,34 @@ local TableClass = Glu.glass.register({
       return #t
     end
 
+    --- Removes and returns the first element of an indexed table, shifting the
+    --- remaining elements down.
+    ---
+    ---@param t table The indexed table to shift from.
+    ---@return any removed The removed first element.
+    ---@example
+    --- ```lua
+    --- table.shift({1, 2, 3})
+    --- -- 1
+    --- ```
     function self.shift(t)
       ___.v.type(t, "table", 1, false)
       ___.v.indexed(t, 1, false)
       return table.remove(t, 1)
     end
 
+    --- Builds an associative table using the values of source as keys. The
+    --- value for each key is taken from a parallel spec table, computed by a
+    --- spec function, or set to a constant spec value.
+    ---
+    ---@param source table An indexed, non-empty table whose values become the keys.
+    ---@param spec any A parallel indexed table, a function called as spec(index, key), or a constant value.
+    ---@return table result The resulting associative table.
+    ---@example
+    --- ```lua
+    --- table.allocate({"a", "b"}, {1, 2})
+    --- -- {a = 1, b = 2}
+    --- ```
     function self.allocate(source, spec)
       local spec_type = type(spec)
       ___.v.type(source, "table", 1, false)
@@ -3978,6 +4310,16 @@ local TableClass = Glu.glass.register({
       return result
     end
 
+    --- Determines whether a table is indexed, meaning its keys are sequential
+    --- integers starting at 1.
+    ---
+    ---@param t table The table to check.
+    ---@return boolean is_indexed True if the table is indexed, otherwise false.
+    ---@example
+    --- ```lua
+    --- table.indexed({1, 2, 3})
+    --- -- true
+    --- ```
     function self.indexed(t)
       ___.v.type(t, "table", 1, false)
 
@@ -3991,6 +4333,16 @@ local TableClass = Glu.glass.register({
       return true
     end
 
+    --- Determines whether a table is associative, meaning it has at least one
+    --- key that is not a positive integer.
+    ---
+    ---@param t table The table to check.
+    ---@return boolean is_associative True if the table is associative, otherwise false.
+    ---@example
+    --- ```lua
+    --- table.associative({a = 1})
+    --- -- true
+    --- ```
     function self.associative(t)
       ___.v.type(t, "table", 1, false)
 
@@ -4002,6 +4354,18 @@ local TableClass = Glu.glass.register({
       return false
     end
 
+    --- Reduces a table to a single value by iteratively applying a function to
+    --- an accumulator and each element.
+    ---
+    ---@param t table The indexed table to reduce.
+    ---@param fn function The reducer called as fn(accumulator, value, key).
+    ---@param initial any The initial value of the accumulator.
+    ---@return any acc The final accumulated value.
+    ---@example
+    --- ```lua
+    --- table.reduce({1, 2, 3}, function(acc, v) return acc + v end, 0)
+    --- -- 6
+    --- ```
     function self.reduce(t, fn, initial)
       ___.v.indexed(t, 1, false)
       ___.v.type(fn, "function", 2, false)
@@ -4014,6 +4378,18 @@ local TableClass = Glu.glass.register({
       return acc
     end
 
+    --- Returns a new indexed table containing the elements from start to stop,
+    --- inclusive.
+    ---
+    ---@param t table The indexed table to slice.
+    ---@param start number The starting index (1-based).
+    ---@param stop number|nil The ending index. (Optional. Default is the length of the table.)
+    ---@return table result A new indexed table with the sliced elements.
+    ---@example
+    --- ```lua
+    --- table.slice({1, 2, 3, 4}, 2, 3)
+    --- -- {2, 3}
+    --- ```
     function self.slice(t, start, stop)
       ___.v.indexed(t, 1, false)
       ___.v.type(start, "number", 2, false)
@@ -4033,6 +4409,19 @@ local TableClass = Glu.glass.register({
       return result
     end
 
+    --- Removes a range of elements from an indexed table in place, returning the
+    --- modified table and the removed elements.
+    ---
+    ---@param t table The indexed table to remove from.
+    ---@param start number The starting index (1-based) of the range to remove.
+    ---@param stop number|nil The ending index of the range. (Optional. Default is start.)
+    ---@return table t The modified table with the range removed.
+    ---@return table snipped An indexed table of the removed elements.
+    ---@example
+    --- ```lua
+    --- table.remove({1, 2, 3, 4}, 2, 3)
+    --- -- {1, 4}, {2, 3}
+    --- ```
     function self.remove(t, start, stop)
       ___.v.indexed(t, 1, false)
       ___.v.type(start, "number", 2, false)
@@ -4050,6 +4439,17 @@ local TableClass = Glu.glass.register({
       return t, snipped
     end
 
+    --- Splits an indexed table into a table of smaller indexed tables, each of
+    --- the given size (the final chunk may be smaller).
+    ---
+    ---@param t table The indexed table to chunk.
+    ---@param size number The maximum size of each chunk.
+    ---@return table result A table of chunk tables.
+    ---@example
+    --- ```lua
+    --- table.chunk({1, 2, 3, 4, 5}, 2)
+    --- -- {{1, 2}, {3, 4}, {5}}
+    --- ```
     function self.chunk(t, size)
       ___.v.indexed(t, 1, false)
       ___.v.type(size, "number", 2, false)
@@ -4061,6 +4461,17 @@ local TableClass = Glu.glass.register({
       return result
     end
 
+    --- Appends the given values to an indexed table in place. Table arguments
+    --- are flattened one level, with their elements appended individually.
+    ---
+    ---@param tbl table The indexed table to append to.
+    ---@param ... any The values or tables to append.
+    ---@return table tbl The modified table.
+    ---@example
+    --- ```lua
+    --- table.concat({1, 2}, {3, 4}, 5)
+    --- -- {1, 2, 3, 4, 5}
+    --- ```
     function self.concat(tbl, ...)
       ___.v.indexed(tbl, 1, false)
 
@@ -4079,6 +4490,16 @@ local TableClass = Glu.glass.register({
       return tbl
     end
 
+    --- Returns a new indexed table with the first n elements removed.
+    ---
+    ---@param tbl table The indexed table to drop from.
+    ---@param n number The number of elements to drop from the start.
+    ---@return table result A new indexed table without the first n elements.
+    ---@example
+    --- ```lua
+    --- table.drop({1, 2, 3, 4}, 2)
+    --- -- {3, 4}
+    --- ```
     function self.drop(tbl, n)
       ___.v.indexed(tbl, 1, false)
       ___.v.type(n, "number", 2, false)
@@ -4086,6 +4507,16 @@ local TableClass = Glu.glass.register({
       return self.slice(tbl, n + 1)
     end
 
+    --- Returns a new indexed table with the last n elements removed.
+    ---
+    ---@param tbl table The indexed table to drop from.
+    ---@param n number The number of elements to drop from the end.
+    ---@return table result A new indexed table without the last n elements.
+    ---@example
+    --- ```lua
+    --- table.drop_right({1, 2, 3, 4}, 2)
+    --- -- {1, 2}
+    --- ```
     function self.drop_right(tbl, n)
       ___.v.indexed(tbl, 1, false)
       ___.v.type(n, "number", 2, false)
@@ -4093,6 +4524,18 @@ local TableClass = Glu.glass.register({
       return self.slice(tbl, 1, #tbl - n)
     end
 
+    --- Fills a range of an indexed table in place with the given value.
+    ---
+    ---@param tbl table The indexed table to fill.
+    ---@param value any The value to fill with.
+    ---@param start number|nil The starting index of the range. (Optional. Default is 1.)
+    ---@param stop number|nil The ending index of the range. (Optional. Default is the length of the table.)
+    ---@return table tbl The modified table.
+    ---@example
+    --- ```lua
+    --- table.fill({1, 2, 3, 4}, 0, 2, 3)
+    --- -- {1, 0, 0, 4}
+    --- ```
     function self.fill(tbl, value, start, stop)
       ___.v.indexed(tbl, 1, false)
       ___.v.type(value, "any", 2, false)
@@ -4107,6 +4550,17 @@ local TableClass = Glu.glass.register({
       return tbl
     end
 
+    --- Returns the index of the first element for which the predicate returns
+    --- true, or nil if none match.
+    ---
+    ---@param tbl table The indexed table to search.
+    ---@param fn function The predicate called as fn(index, value).
+    ---@return number|nil index The index of the first matching element, or nil.
+    ---@example
+    --- ```lua
+    --- table.find({1, 2, 3}, function(i, v) return v == 2 end)
+    --- -- 2
+    --- ```
     function self.find(tbl, fn)
       ___.v.indexed(tbl, 1, false)
       ___.v.type(fn, "function", 2, false)
@@ -4119,6 +4573,17 @@ local TableClass = Glu.glass.register({
       return nil
     end
 
+    --- Returns the index of the last element for which the predicate returns
+    --- true, or nil if none match.
+    ---
+    ---@param tbl table The indexed table to search.
+    ---@param fn function The predicate called as fn(index, value).
+    ---@return number|nil index The index of the last matching element, or nil.
+    ---@example
+    --- ```lua
+    --- table.find_last({1, 2, 2, 3}, function(i, v) return v == 2 end)
+    --- -- 3
+    --- ```
     function self.find_last(tbl, fn)
       ___.v.indexed(tbl, 1, false)
       ___.v.type(fn, "function", 2, false)
@@ -4131,6 +4596,16 @@ local TableClass = Glu.glass.register({
       return nil
     end
 
+    --- Flattens an indexed table by one level, expanding any nested tables into
+    --- the result.
+    ---
+    ---@param tbl table The indexed table to flatten.
+    ---@return table result A new indexed table flattened one level.
+    ---@example
+    --- ```lua
+    --- table.flatten({1, {2, 3}, 4})
+    --- -- {1, 2, 3, 4}
+    --- ```
     function self.flatten(tbl)
       ___.v.indexed(tbl, 1, false)
 
@@ -4146,6 +4621,16 @@ local TableClass = Glu.glass.register({
       return result
     end
 
+    --- Recursively flattens an indexed table, expanding all nested tables at any
+    --- depth into the result.
+    ---
+    ---@param tbl table The indexed table to flatten.
+    ---@return table result A new fully flattened indexed table.
+    ---@example
+    --- ```lua
+    --- table.flatten_deeply({1, {2, {3, 4}}})
+    --- -- {1, 2, 3, 4}
+    --- ```
     function self.flatten_deeply(tbl)
       ___.v.indexed(tbl, 1, false)
 
@@ -4161,12 +4646,32 @@ local TableClass = Glu.glass.register({
       return result
     end
 
+    --- Returns a new indexed table containing all but the last element.
+    ---
+    ---@param tbl table The indexed table to take the initial elements from.
+    ---@return table result A new indexed table without the last element.
+    ---@example
+    --- ```lua
+    --- table.initial({1, 2, 3})
+    --- -- {1, 2}
+    --- ```
     function self.initial(tbl)
       ___.v.indexed(tbl, 1, false)
       if #tbl <= 1 then return {} end
       return self.slice(tbl, 1, #tbl - 1)
     end
 
+    --- Removes all occurrences of the given values from an indexed table in
+    --- place.
+    ---
+    ---@param tbl table The indexed table to pull values from.
+    ---@param ... any The values to remove.
+    ---@return table tbl The modified table.
+    ---@example
+    --- ```lua
+    --- table.pull({1, 2, 3, 2, 1}, 2)
+    --- -- {1, 3, 1}
+    --- ```
     function self.pull(tbl, ...)
       ___.v.indexed(tbl, 1, false)
 
@@ -4187,6 +4692,15 @@ local TableClass = Glu.glass.register({
       return tbl
     end
 
+    --- Reverses the order of the elements of an indexed table in place.
+    ---
+    ---@param tbl table The indexed table to reverse.
+    ---@return table tbl The reversed table.
+    ---@example
+    --- ```lua
+    --- table.reverse({1, 2, 3})
+    --- -- {3, 2, 1}
+    --- ```
     function self.reverse(tbl)
       ___.v.indexed(tbl, 1, false)
 
@@ -4197,6 +4711,16 @@ local TableClass = Glu.glass.register({
       return tbl
     end
 
+    --- Removes duplicate values from an indexed table in place, keeping the
+    --- first occurrence of each value.
+    ---
+    ---@param tbl table The indexed table to deduplicate.
+    ---@return table tbl The modified table with duplicates removed.
+    ---@example
+    --- ```lua
+    --- table.uniq({1, 2, 2, 3, 1})
+    --- -- {1, 2, 3}
+    --- ```
     function self.uniq(tbl)
       ___.v.indexed(tbl, 1, false)
 
@@ -4220,6 +4744,16 @@ local TableClass = Glu.glass.register({
       return tbl
     end
 
+    --- Unzips a table of equal-length sub-tables, regrouping their elements by
+    --- position into new sub-tables.
+    ---
+    ---@param tbl table An indexed table of equal-length indexed sub-tables.
+    ---@return table result A new table of sub-tables grouped by position.
+    ---@example
+    --- ```lua
+    --- table.unzip({{1, "a"}, {2, "b"}})
+    --- -- {{1, 2}, {"a", "b"}}
+    --- ```
     function self.unzip(tbl)
       ___.v.indexed(tbl, 1, false)
 
@@ -4245,6 +4779,15 @@ local TableClass = Glu.glass.register({
       return result
     end
 
+    --- Creates a new table with weak references, controlled by the given mode.
+    ---
+    ---@param opt string|nil The weak mode: "k", "v", or "kv". (Optional. Default is "v".)
+    ---@return table tbl A new table with the specified weak mode.
+    ---@example
+    --- ```lua
+    --- table.new_weak("kv")
+    --- -- a table with weak keys and values
+    --- ```
     function self.new_weak(opt)
       opt = opt or "v"
       ___.v.test(rex.match(opt, "^(k?v?|v?k?)$"), opt, 1, false)
@@ -4252,12 +4795,31 @@ local TableClass = Glu.glass.register({
       return setmetatable({}, { __mode = opt })
     end
 
+    --- Determines whether a table holds weak references.
+    ---
+    ---@param tbl table The table to check.
+    ---@return boolean is_weak True if the table has a weak mode set, otherwise false.
+    ---@example
+    --- ```lua
+    --- table.weak(table.new_weak("v"))
+    --- -- true
+    --- ```
     function self.weak(tbl)
       ___.v.type(tbl, "table", 1, false)
       local mt = getmetatable(tbl)
       return mt ~= nil and mt.__mode ~= nil
     end
 
+    --- Zips multiple equal-length indexed tables together, grouping elements at
+    --- the same position into new sub-tables.
+    ---
+    ---@param ... table The equal-length indexed tables to zip.
+    ---@return table results A new table of position-grouped sub-tables.
+    ---@example
+    --- ```lua
+    --- table.zip({1, 2}, {"a", "b"})
+    --- -- {{1, "a"}, {2, "b"}}
+    --- ```
     function self.zip(...)
       local tbls = { ... }
       local results = {}
@@ -4274,6 +4836,16 @@ local TableClass = Glu.glass.register({
       return results
     end
 
+    --- Determines whether an indexed table contains the given value.
+    ---
+    ---@param tbl table The indexed table to search.
+    ---@param value any The value to look for.
+    ---@return boolean present True if the value is present, otherwise false.
+    ---@example
+    --- ```lua
+    --- table.includes({1, 2, 3}, 2)
+    --- -- true
+    --- ```
     function self.includes(tbl, value)
       ___.v.indexed(tbl, 1, false)
       ___.v.type(value, "any", 2, false)
@@ -4335,6 +4907,17 @@ local TableClass = Glu.glass.register({
       return result
     end
 
+    --- Returns the names of all function-valued keys of an object table,
+    --- optionally including those inherited through its metatable chain.
+    ---
+    ---@param tbl table The object table to inspect.
+    ---@param extending boolean|nil Whether to include inherited functions. (Optional. Default is false.)
+    ---@return table result An indexed table of function names.
+    ---@example
+    --- ```lua
+    --- table.functions(myObject)
+    --- -- {"method_a", "method_b"}
+    --- ```
     function self.functions(tbl, extending)
       ___.v.object(tbl, 1, false)
       ___.v.type(extending, "boolean", 2, true)
@@ -4347,6 +4930,17 @@ local TableClass = Glu.glass.register({
     -- Alias for functions
     self.methods = self.functions
 
+    --- Returns the names of all non-function keys of an object table, optionally
+    --- including those inherited through its metatable chain.
+    ---
+    ---@param tbl table The object table to inspect.
+    ---@param extending boolean|nil Whether to include inherited properties. (Optional. Default is false.)
+    ---@return table result An indexed table of property names.
+    ---@example
+    --- ```lua
+    --- table.properties(myObject)
+    --- -- {"name", "value"}
+    --- ```
     function self.properties(tbl, extending)
       ___.v.object(tbl, 1, false)
       ___.v.type(extending, "boolean", 2, true)
@@ -4357,11 +4951,32 @@ local TableClass = Glu.glass.register({
       return assemble_results(tables, test)
     end
 
+    --- Determines whether a table is an object, identified by an `object` field
+    --- set to true.
+    ---
+    ---@param tbl table The table to check.
+    ---@return boolean is_object True if the table is an object, otherwise false.
+    ---@example
+    --- ```lua
+    --- table.object({object = true})
+    --- -- true
+    --- ```
     function self.object(tbl)
       ___.v.type(tbl, "table", 1, false)
       return tbl.object == true
     end
 
+    --- Merges the key-value pairs of one associative table into another in
+    --- place, overwriting existing keys.
+    ---
+    ---@param tbl table The associative table to merge into.
+    ---@param value table The associative table whose pairs are copied in.
+    ---@return table tbl The modified table.
+    ---@example
+    --- ```lua
+    --- table.add({a = 1}, {b = 2})
+    --- -- {a = 1, b = 2}
+    --- ```
     function self.add(tbl, value)
       ___.v.associative(tbl, 1, false)
       ___.v.associative(value, 2, false)
@@ -4373,6 +4988,18 @@ local TableClass = Glu.glass.register({
       return tbl
     end
 
+    --- Inserts the elements of one indexed table into another at the given
+    --- index, in place.
+    ---
+    ---@param tbl1 table The indexed table to insert into.
+    ---@param tbl2 table The indexed table whose elements are inserted.
+    ---@param index number|nil The position at which to insert. (Optional. Default is the end of tbl1.)
+    ---@return table tbl1 The modified table.
+    ---@example
+    --- ```lua
+    --- table.n_add({1, 4}, {2, 3}, 2)
+    --- -- {1, 2, 3, 4}
+    --- ```
     function self.n_add(tbl1, tbl2, index)
       ___.v.indexed(tbl1, 1, false)
       ___.v.indexed(tbl2, 2, false)
@@ -4389,6 +5016,17 @@ local TableClass = Glu.glass.register({
       return tbl1
     end
 
+    --- Returns a stateful iterator function that walks the elements of an
+    --- indexed table, yielding each index and value.
+    ---
+    ---@param tbl table The indexed table to walk.
+    ---@return function iterator An iterator returning index and value on each call.
+    ---@example
+    --- ```lua
+    --- for i, v in table.walk({"a", "b"}) do print(i, v) end
+    --- -- 1 a
+    --- -- 2 b
+    --- ```
     function self.walk(tbl)
       ___.v.indexed(tbl, 1, false)
 
@@ -4399,6 +5037,15 @@ local TableClass = Glu.glass.register({
       end
     end
 
+    --- Returns a uniformly random element from an indexed table.
+    ---
+    ---@param list table The indexed table to choose from.
+    ---@return any element A randomly chosen element.
+    ---@example
+    --- ```lua
+    --- table.element_of({"a", "b", "c"})
+    --- -- "b"
+    --- ```
     function self.element_of(list)
       ___.v.type(list, "table", 1, false)
 
@@ -4406,6 +5053,16 @@ local TableClass = Glu.glass.register({
       return list[math.random(max)]
     end
 
+    --- Returns a randomly chosen key from an associative table, where each
+    --- value is the relative weight of its key.
+    ---
+    ---@param list table An associative table mapping keys to numeric weights.
+    ---@return any key A randomly chosen key, weighted by its value.
+    ---@example
+    --- ```lua
+    --- table.element_of_weighted({common = 90, rare = 10})
+    --- -- "common"
+    --- ```
     function self.element_of_weighted(list)
       ___.v.type(list, "table", 1, false)
 
@@ -4432,6 +5089,17 @@ local TableClass = Glu.glass.register({
       return condition
     end
 
+    --- Determines whether all elements of an indexed table satisfy the
+    --- condition. The condition may be a predicate function or a value to match.
+    ---
+    ---@param tbl table The indexed table to test.
+    ---@param condition any A predicate function or a value to compare each element against.
+    ---@return boolean matched True if every element satisfies the condition, otherwise false.
+    ---@example
+    --- ```lua
+    --- table.all({2, 4, 6}, function(v) return v % 2 == 0 end)
+    --- -- true
+    --- ```
     function self.all(tbl, condition)
       ___.v.indexed(tbl, 1, false)
       ___.v.type(condition, "any", 2, false)
@@ -4448,6 +5116,17 @@ local TableClass = Glu.glass.register({
       return count == #tbl
     end
 
+    --- Determines whether at least one element of an indexed table satisfies the
+    --- condition. The condition may be a predicate function or a value to match.
+    ---
+    ---@param tbl table The indexed table to test.
+    ---@param condition any A predicate function or a value to compare each element against.
+    ---@return boolean matched True if any element satisfies the condition, otherwise false.
+    ---@example
+    --- ```lua
+    --- table.some({1, 2, 3}, 2)
+    --- -- true
+    --- ```
     function self.some(tbl, condition)
       ___.v.indexed(tbl, 1, false)
       ___.v.type(condition, "any", 2, false)
@@ -4457,6 +5136,17 @@ local TableClass = Glu.glass.register({
       return #table.n_filter(tbl, condition) > 0
     end
 
+    --- Determines whether no element of an indexed table satisfies the
+    --- condition. The condition may be a predicate function or a value to match.
+    ---
+    ---@param tbl table The indexed table to test.
+    ---@param condition any A predicate function or a value to compare each element against.
+    ---@return boolean matched True if no element satisfies the condition, otherwise false.
+    ---@example
+    --- ```lua
+    --- table.none({1, 3, 5}, function(v) return v % 2 == 0 end)
+    --- -- true
+    --- ```
     function self.none(tbl, condition)
       ___.v.indexed(tbl, 1, false)
       ___.v.type(condition, "any", 2, false)
@@ -4466,6 +5156,17 @@ local TableClass = Glu.glass.register({
       return #table.n_filter(tbl, condition) == 0
     end
 
+    --- Determines whether exactly one element of an indexed table satisfies the
+    --- condition. The condition may be a predicate function or a value to match.
+    ---
+    ---@param tbl table The indexed table to test.
+    ---@param condition any A predicate function or a value to compare each element against.
+    ---@return boolean matched True if exactly one element satisfies the condition, otherwise false.
+    ---@example
+    --- ```lua
+    --- table.one({1, 2, 3}, 2)
+    --- -- true
+    --- ```
     function self.one(tbl, condition)
       ___.v.indexed(tbl, 1, false)
       ___.v.type(condition, "any", 2, false)
@@ -4475,6 +5176,17 @@ local TableClass = Glu.glass.register({
       return #table.n_filter(tbl, condition) == 1
     end
 
+    --- Counts how many elements of an indexed table satisfy the condition. The
+    --- condition may be a predicate function or a value to match.
+    ---
+    ---@param tbl table The indexed table to test.
+    ---@param condition any A predicate function or a value to compare each element against.
+    ---@return number count The number of elements that satisfy the condition.
+    ---@example
+    --- ```lua
+    --- table.count({1, 2, 2, 3}, 2)
+    --- -- 2
+    --- ```
     function self.count(tbl, condition)
       ___.v.indexed(tbl, 1, false)
       ___.v.type(condition, "any", 2, false)
@@ -4484,6 +5196,16 @@ local TableClass = Glu.glass.register({
       return #table.n_filter(tbl, condition)
     end
 
+    --- Returns a new indexed table sorted using natural comparison, leaving the
+    --- original table unmodified.
+    ---
+    ---@param tble table The indexed table to sort.
+    ---@return table sorted A new naturally sorted indexed table.
+    ---@example
+    --- ```lua
+    --- table.natural_sort({"item10", "item2", "item1"})
+    --- -- {"item1", "item2", "item10"}
+    --- ```
     function self.natural_sort(tble)
       ___.v.indexed(tble, 1, false)
 
@@ -4495,6 +5217,18 @@ local TableClass = Glu.glass.register({
       return sorted
     end
 
+    --- Sorts an indexed table. If a comparator function is given, the table is
+    --- sorted in place with it; otherwise a new naturally sorted table is
+    --- returned.
+    ---
+    ---@param tbl table The indexed table to sort.
+    ---@param arg function|nil A comparator function. (Optional. When omitted, natural sort is used.)
+    ---@return table|nil sorted A new naturally sorted table when no comparator is given, otherwise nil.
+    ---@example
+    --- ```lua
+    --- table.sort({3, 1, 2})
+    --- -- {1, 2, 3}
+    --- ```
     function self.sort(tbl, arg)
       ___.v.indexed(tbl, 1, false)
 
@@ -4577,217 +5311,6 @@ local TableClass = Glu.glass.register({
 })
 
 
--- File: test.lua
-local TestClass = Glu.glass.register({
-  name = "test",
-  class_name = "TestClass",
-  call = "runner",
-  dependencies = { "table", "test_runner" },
-  setup = function(___, self)
-    local testers = {}
-
-    function self.runner(opts)
-      opts = opts or {}
-      local runner = ___.test_runner(opts, self)
-
-      testers[runner.id] = runner
-
-      return runner
-    end
-
-    local function sum(tests)
-      local result = 0
-
-      for _, test in ipairs(tests) do
-        result = result + test
-      end
-
-      return result
-    end
-
-    local function sum_field(tbls, field)
-      local totals = {}
-
-      for _, tbl in ipairs(tbls) do
-        table.insert(totals, tbl[field])
-      end
-
-      return sum(totals)
-    end
-
-    function self.summary(runner)
-      local good_colour, bad_colour = unpack(___.table.values(runner.colours))
-      local total_run = sum_field(runner.tests, "total")
-      local total_pass = sum_field(runner.tests, "passes")
-      local total_fail = sum_field(runner.tests, "fails")
-
-      print("")
-      cecho("<b> Tests run:</b> <gold>" .. total_run .. "<r>\n")
-      cecho("<b> Successes:</b> " .. good_colour .. total_pass .. "<r>\n")
-      cecho("<b>  Failures:</b> " .. bad_colour .. total_fail .. "<r>\n")
-    end
-
-    return self
-  end
-})
-
-
--- File: test_runner.lua
-local TestRunnerClass = Glu.glass.register({
-  name = "test_runner",
-  class_name = "TestRunnerClass",
-  call = "new_runner",
-  dependencies = { "table", "conditions", "colour" },
-  setup = function(___, self)
-    function self.new_runner(opts, owner)
-      opts = opts or {}
-      self.id = ___.id()
-      self.tests = {}
-      self.colours = {
-        pass = (opts.colour and opts.colour.pass) or "<yellow_green>",
-        fail = (opts.colour and opts.colour.fail) or "<orange_red>",
-      }
-      self.symbols = {
-        -- check mark
-        pass = (opts.symbol and opts.symbol.pass) or utf8.escape("%x{2714}"),
-        -- cross mark
-        fail = (opts.symbol and opts.symbol.fail) or utf8.escape("%x{2718}"),
-      }
-      ___.v.colour_name(self.colours.pass, 2, false)
-      ___.v.colour_name(self.colours.fail, 2, false)
-
-      local cond = ___.conditions
-      local default = { tests = {} }
-      local resets = { passes = 0, fails = 0, total = 0 }
-
-      function self.add(name, test)
-        ___.v.type(name, "string", 1, false)
-        ___.v.type(test, "function", 2, false)
-        table.insert(self.tests, {
-          name = name,
-          test = test,
-          passes = 0,
-          fails = 0,
-          total = 0,
-          runner = self,
-        })
-
-        return self
-      end
-
-      function self.remove(name)
-        for i, test in ipairs(self.tests) do
-          if test.name == name then
-            table.remove(self.tests, i)
-            return self
-          end
-        end
-
-        error(f "Test '{name}' not found")
-      end
-
-      if opts.tests then
-        for _, entry in ipairs(opts.tests) do
-          local name = entry.name or entry[1]
-          local test = entry.func or entry.test or entry[2]
-          self.add(name, test)
-        end
-      end
-
-      function self.print()
-        for _, test in ipairs(self.tests) do
-          cecho(f "<b>{test.name}<r>\n")
-        end
-
-        return self
-      end
-
-      function self.reset()
-        for k, v in pairs(resets) do
-          for _, test in ipairs(self.tests) do
-            test[k] = v
-          end
-        end
-
-        return self
-      end
-
-      function self.wipe()
-        for i in pairs(self.tests) do
-          self.tests[i] = nil
-        end
-
-        return self
-      end
-
-      function self.pass(test)
-        test.total = test.total + 1
-        test.passes = test.passes + 1
-      end
-
-      function self.fail(test)
-        test.total = test.total + 1
-        test.fails = test.fails + 1
-      end
-
-      function self.execute(reset_when_done)
-        reset_when_done = reset_when_done or false
-
-        self.reset()
-
-        for _, t in ipairs(self.tests) do
-          local status_message =
-              f "<light_goldenrod>Running test '{t.name}' " ..
-              "(<r><seashell>%d<r><light_goldenrod>): "
-
-          local success, result, fail_message = (function(test, condition)
-            registerNamedEventHandler(test.name, test.name, "condition_is",
-              function(_, c)
-                if c == true then
-                  self.pass(test)
-                elseif c == false then
-                  self.fail(test)
-                else
-                  error(f "Expected a boolean, got {c}")
-                end
-              end
-            )
-
-            local success, result, fail_message = pcall(test.test, condition, self, test)
-
-            deleteNamedEventHandler(test.name, test.name)
-
-            return success, result, fail_message
-          end)(t, cond)
-
-          -- If we didn't succeed in our pcall OR we failed tests
-          if not success or not result then
-            self.fail(t)
-            status_message =
-                status_message .. self.colours.fail .. self.symbols.fail .. "\n" ..
-                " " .. self.colours.fail .. "Error in test '" .. t.name .. "':\n" ..
-                "  " .. tostring(result or fail_message) .. "\n"
-          else
-            self.pass(t)
-            status_message = status_message .. self.colours.pass .. self.symbols.pass .. "\n"
-          end
-
-          status_message = string.format(status_message, t.total)
-          cecho(status_message)
-        end
-
-        owner.summary(self)
-
-        if reset_when_done then self.reset() end
-
-        return self
-      end
-      return self
-    end
-  end
-})
-
-
 -- File: timer.lua
 local TimerClass = Glu.glass.register({
   name = "timer",
@@ -4826,11 +5349,11 @@ local TimerClass = Glu.glass.register({
     end
 
     --- Creates nested timers and returns true if successful.
-    --- @param name string - The name of the multi timer.
-    --- @param def table - The definition of the multi timer.
-    --- @param delay number - The delay between each timer.
-    --- @return boolean - True if the multi timer was created, errors out if not.
-    --- @example
+    ---@param name string The name of the multi timer.
+    ---@param def table The definition of the multi timer.
+    ---@param delay number The delay between each timer.
+    ---@return boolean ok True if the multi timer was created, errors out if not.
+    ---@example
     --- ```lua
     --- -- At intervals of 5 seconds, print "hi", "there", "you", "amazing", and
     --- -- "developer"
@@ -4883,9 +5406,9 @@ local TimerClass = Glu.glass.register({
     end
 
     --- Kills a multi timer by name.
-    --- @param name string - The name of the multi timer.
-    --- @return boolean|nil - True if the multi timer was killed, nil if it doesn't exist.
-    --- @example
+    ---@param name string The name of the multi timer.
+    ---@return boolean|nil killed True if the multi timer was killed, nil if it doesn't exist.
+    ---@example
     --- ```lua
     --- timer.kill_multi("Greetings")
     --- ```
@@ -4922,6 +5445,17 @@ local TryClass = Glu.glass.register({
       result = nil
     }
 
+    --- Starts a new try chain by running the given function under pcall.
+    --- Creates a fresh try object and immediately runs `try` on it, recording
+    --- whether the function succeeded or errored.
+    ---
+    ---@param f function The function to execute.
+    ---@param ... any Arguments passed to the function.
+    ---@return object try The new try object for chaining.
+    ---@example
+    --- ```lua
+    --- try.clone(function() error("boom") end):catch(function(e) end)
+    --- ```
     function self.clone(f, ...)
       local glass = ___.get_glass("try")
       assert(glass, "TryClass not found")
@@ -4930,6 +5464,17 @@ local TryClass = Glu.glass.register({
     end
 
     -- first, let's try to execute the function
+    --- Runs the given function under pcall and records the result.
+    --- Stores success state, the returned value or error, and updates the try
+    --- object's `result` and `caught` fields.
+    ---
+    ---@param f function The function to execute.
+    ---@param ... any Arguments passed to the function.
+    ---@return object self The try object for chaining.
+    ---@example
+    --- ```lua
+    --- try.try(function() return 42 end):catch(function(e) end)
+    --- ```
     function self.try(f, ...)
       local success, try_result = pcall(f, ...)
       if success then
@@ -4956,6 +5501,16 @@ local TryClass = Glu.glass.register({
       return self
     end
 
+    --- Runs the given handler with the try result, capturing any error.
+    --- The handler receives the recorded try outcome. Its own success or failure
+    --- is stored in the catch result.
+    ---
+    ---@param f function The handler to run with the try result.
+    ---@return object self The try object for chaining.
+    ---@example
+    --- ```lua
+    --- try.clone(function() error("boom") end):catch(function(e) print(e.error) end)
+    --- ```
     function self.catch(f)
       local success, catch_result = pcall(f, result.try)
       if success then
@@ -4976,6 +5531,16 @@ local TryClass = Glu.glass.register({
       return self
     end
 
+    --- Always runs the given function, regardless of success or failure.
+    --- The function receives the full result. If the finally block itself errors,
+    --- that error is raised.
+    ---
+    ---@param f function The function to always run.
+    ---@return object self The try object for chaining.
+    ---@example
+    --- ```lua
+    --- try.clone(function() error("boom") end):finally(function(r) end)
+    --- ```
     function self.finally(f)
       -- Pass both success and error information to finally block
       local success, finally_result = pcall(f, result)
@@ -5000,9 +5565,9 @@ local UrlClass = Glu.glass.register({
     --- Decodes a string that has been URL-encoded. Useful for decoding query
     --- parameters into a more readable format.
     ---
-    --- @param str string - The URL-encoded string to decode.
-    --- @return string - The decoded string.
-    --- @example
+    ---@param str string The URL-encoded string to decode.
+    ---@return string str The decoded string.
+    ---@example
     --- ```lua
     --- url:decode("This%20string%20is%20now%20readable%21%21%21")
     --- -- "This string is now readable!!!"
@@ -5020,9 +5585,9 @@ local UrlClass = Glu.glass.register({
     --- Encodes a string into a URL-encoded string. Useful for encoding query
     --- parameters into a URL before sending it to a server.
     ---
-    --- @param str string - The string to encode.
-    --- @return string - The URL-encoded string.
-    --- @example
+    ---@param str string The string to encode.
+    ---@return string str The URL-encoded string.
+    ---@example
     --- ```lua
     --- url:encode("This string is now usable in a URL.")
     --- -- "This%20string%20is%20now%20usable%20in%20a%20URL%2E"
@@ -5038,9 +5603,9 @@ local UrlClass = Glu.glass.register({
 
     --- Parses a query string into a table of key-value pairs.
     ---
-    --- @param query_string string - The query string to parse.
-    --- @return table - A table containing the parsed key-value pairs.
-    --- @example
+    ---@param query_string string The query string to parse.
+    ---@return table params A table containing the parsed key-value pairs.
+    ---@example
     --- ```lua
     --- url:decode_params("name=John&age=30")
     --- -- { name = "John", age = "30" }
@@ -5058,9 +5623,9 @@ local UrlClass = Glu.glass.register({
 
     --- Encodes a table of key-value pairs into a query string.
     ---
-    --- @param params table - The table of key-value pairs to encode.
-    --- @return string - The encoded query string.
-    --- @example
+    ---@param params table The table of key-value pairs to encode.
+    ---@return string encoded The encoded query string.
+    ---@example
     --- ```lua
     --- url:encode_params({ name = "John", age = "30" })
     --- -- "name=John&age=30"
@@ -5075,9 +5640,9 @@ local UrlClass = Glu.glass.register({
 
     --- Parses a URL into its components.
     ---
-    --- @param url string - The URL to parse.
-    --- @return table - A table containing the parsed URL components.
-    --- @example
+    ---@param url string The URL to parse.
+    ---@return table parsed A table containing the parsed URL components.
+    ---@example
     --- ```lua
     --- url:parse("https://example.com/path/dosomething?name=John&age=30")
     --- -- {
@@ -5146,18 +5711,18 @@ local VersionClass = Glu.glass.register({
     --- string, then it can be a string representation of a number or a semver
     --- string.
     ---
-    --- @param version1 string|number - The first version string or number.
-    --- @param version2 string|number - The second version string or number.
-    --- @return number - 1 if version1 is greater than version2, -1 if version1 is less than version2, and 0 if they are the same.
-    --- @example
+    ---@param version1 string|number The first version string or number.
+    ---@param version2 string|number The second version string or number.
+    ---@return number result 1 if version1 is greater than version2, -1 if version1 is less than version2, and 0 if they are the same.
+    ---@example
     --- ```lua
     --- version.compare("1.0.0", "2.0.0")
     --- -- -1
     --- ```
     function self.compare(version1, version2)
       -- The versions must be of the same type
-      ___.v.test(type(version1) == "string" or type(version1) == "number", 1, "Invalid value to argument 1. Expected a string or number.")
-      ___.v.test(type(version2) == "string" or type(version2) == "number", 2, "Invalid value to argument 2. Expected a string or number.")
+      ___.v.test(type(version1) == "string" or type(version1) == "number", "Expected a string or number.", 1)
+      ___.v.test(type(version2) == "string" or type(version2) == "number", "Expected a string or number.", 2)
       ___.v.same_type(version1, version2)
 
       version1 = tostring(version1)
@@ -5167,10 +5732,10 @@ local VersionClass = Glu.glass.register({
       local version1_parts = version1:split("%.") or {}
       local version2_parts = version2:split("%.") or {}
 
-      ___.v.test(type(version1_parts) == "table", 1, "Invalid value to argument 1. Expected a string.")
-      ___.v.test(type(version2_parts) == "table", 2, "Invalid value to argument 2. Expected a string.")
+      ___.v.test(type(version1_parts) == "table", "Expected a string.", 1)
+      ___.v.test(type(version2_parts) == "table", "Expected a string.", 2)
 
-      ___.v.test(#version1_parts == #version2_parts, 1, "Invalid value to arguments. Expected 1 and 2 to have the same number of parts.")
+      ___.v.test(#version1_parts == #version2_parts, "Expected arguments 1 and 2 to have the same number of parts.", 1)
 
       for i = 1, #version1_parts do
         local result = _compare(version1_parts[i], version2_parts[i])
