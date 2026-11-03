@@ -327,7 +327,7 @@ local Glu
     local handler_name = "glu_sysUninstall_" .. Glu.id()
     instance.handler_name = handler_name
     registerNamedEventHandler("glu", handler_name, "sysUninstall",
-      function(event, p)
+      function(_, p)
         if p == instance.package_name then
           deleteNamedEventHandler("glu", handler_name)
           instance = nil
@@ -496,7 +496,6 @@ local Glu
 
         -- Handle adoptions
         if class_opts.adopts then
-          local mt = getmetatable(self)
           local adopted_methods = {}
 
           for class_name, adoption in pairs(class_opts.adopts) do
@@ -631,7 +630,7 @@ local GlassLoaderClass = Glu.glass.register({
   name = "glass_loader",
   call = "load_glass",
   dependencies = { "try", "http", "fd", "string" },
-  setup = function(___, self, instance_opts, container)
+  setup = function(___, self)
 
     --- Loads a "glass" (a Lua module/chunk) from a local file path or an
     --- http(s) URL. URL loads are asynchronous and the result is delivered
@@ -639,6 +638,7 @@ local GlassLoaderClass = Glu.glass.register({
     ---
     ---@param opts table The options table. Fields: `path` (string) a local file path or http(s) URL, `cb`/`callback` (function, required) invoked with the loaded chunk on success or with (nil, errorMessage) on failure, and `execute` (boolean) whether to immediately execute the loaded chunk.
     ---@return boolean|nil ok Returns `false` and an error message when no callback is provided; otherwise returns nothing, as results are delivered through the callback.
+    ---@return string|nil err The error message when no callback is provided.
     ---@example
     --- ```lua
     --- glass_loader.load_glass({path = "https://example.com/thing.lua", cb = function(g, err) end})
@@ -959,7 +959,33 @@ local ColourClass = Glu.glass.register({
   name = "colour",
   dependencies = { "number" },
   setup = function(___, self)
-    local v = self.v
+
+    -- Converts RGB to unrounded HSL (degrees, percent, percent). Also reports
+    -- whether the colour is achromatic (a grey), in which case its hue is
+    -- meaningless and reported as 0.
+    local function raw_hsl(rgb)
+      local r, g, b = rgb[1] / 255, rgb[2] / 255, rgb[3] / 255
+      local max, min = math.max(r, g, b), math.min(r, g, b)
+      local h, s, l = 0, 0, (max + min) / 2
+
+      if max ~= min then
+        local d = max - min
+        s = l > 0.5 and d / (2 - max - min) or d / (max + min)
+
+        if max == r then
+          h = (g - b) / d + (g < b and 6 or 0)
+        elseif max == g then
+          h = (b - r) / d + 2
+        else
+          h = (r - g) / d + 4
+        end
+
+        h = h / 6
+      end
+
+      return { h * 360, s * 100, l * 100 }, max == min
+    end
+
     --- Interpolates between two RGB colours based on a step value. Functionally,
     --- it takes two colours and returns a third colour somewhere between the
     --- two colours, based on the step value. Generally used to fade between two
@@ -1009,12 +1035,21 @@ local ColourClass = Glu.glass.register({
         f "Invalid interpolation method: {method}. Must be one of: " ..
         table.concat(valid_methods, ", "), 4, false)
 
-      local hsl1 = self.rgb_to_hsl(rgb1)
-      local hsl2 = self.rgb_to_hsl(rgb2)
+      -- Work in unrounded HSL so dark or subtle colours keep their precision
+      local hsl1, grey1 = raw_hsl(rgb1)
+      local hsl2, grey2 = raw_hsl(rgb2)
       local t = factor / 100
 
-      -- Special handling for hue to ensure we take shortest path around the color wheel
+      -- A grey has no hue, so borrow the other colour's hue rather than
+      -- sweeping around the wheel from red.
       local h1, h2 = hsl1[1], hsl2[1]
+      if grey1 and not grey2 then
+        h1 = h2
+      elseif grey2 and not grey1 then
+        h2 = h1
+      end
+
+      -- Special handling for hue to ensure we take shortest path around the color wheel
       local diff = h2 - h1
       if diff > 180 then
         h2 = h2 - 360
@@ -1041,30 +1076,13 @@ local ColourClass = Glu.glass.register({
     function self.rgb_to_hsl(rgb)
       ___.v.rgb_table(rgb, 1, false)
 
-      local r, g, b = rgb[1] / 255, rgb[2] / 255, rgb[3] / 255
-      local max, min = math.max(r, g, b), math.min(r, g, b)
-      local h, s, l = 0, 0, (max + min) / 2
+      local h, s, l = table.unpack((raw_hsl(rgb)))
 
-      if max ~= min then
-        local d = max - min
-        s = l > 0.5 and d / (2 - max - min) or d / (max + min)
-
-        if max == r then
-          h = (g - b) / d + (g < b and 6 or 0)
-        elseif max == g then
-          h = (b - r) / d + 2
-        else
-          h = (r - g) / d + 4
-        end
-
-        h = h / 6
-      end
-
-      -- Convert to degrees/percentages and ensure numbers
+      -- Round to whole degrees/percentages
       return {
-        math.floor(h * 360 + 0.5),
-        math.floor(s * 100 + 0.5),
-        math.floor(l * 100 + 0.5)
+        math.floor(h + 0.5),
+        math.floor(s + 0.5),
+        math.floor(l + 0.5)
       }
     end
 
@@ -1503,7 +1521,7 @@ local ColourClass = Glu.glass.register({
     end
   end,
   -- Validations
-  valid = function(___, self)
+  valid = function(___)
     return {
       rgb_table = function(colour, argument_index, nil_allowed)
         if nil_allowed and colour == nil then return end
@@ -1580,24 +1598,32 @@ local DateClass = Glu.glass.register({
   class_name = "DateClass",
   name = "date",
   dependencies = {},
-  setup = function(___, self, opts)
+  setup = function(___, self)
     local v = ___.v
+
+    -- Calendar approximations used when formatting long durations.
+    local DAYS_PER_YEAR = 365
+    local DAYS_PER_MONTH = 30
 
     --- Converts a number of seconds into hours, minutes, and seconds.
     --- When `as_string` is true, returns a single human-readable string such as
-    --- "1h 2m 3s". Otherwise, returns three zero-padded "HH", "MM", "SS" strings.
+    --- "1y 2mo 3d 4h 5m 6s", omitting any zero units ("0s" when all are zero).
+    --- A year is 365 days and a month is 30 days. Otherwise, returns three
+    --- zero-padded "HH", "MM", "SS" strings, where hours are not capped at 24.
     ---
     ---@param seconds number The number of seconds to convert.
     ---@param as_string boolean|nil Whether to return a single formatted string instead of three values. (Optional. Default is false.)
     ---@return string hours The zero-padded hours, or the single formatted string when `as_string` is true.
-    ---@return string minutes The zero-padded minutes. Not returned when `as_string` is true.
-    ---@return string seconds The zero-padded seconds. Not returned when `as_string` is true.
+    ---@return string? minutes The zero-padded minutes. Not returned when `as_string` is true.
+    ---@return string? seconds The zero-padded seconds. Not returned when `as_string` is true.
     ---@example
     --- ```lua
     --- date.shms(3661)
     --- -- "01", "01", "01"
     --- date.shms(3661, true)
     --- -- "1h 1m 1s"
+    --- date.shms(90061, true)
+    --- -- "1d 1h 1m 1s"
     --- ```
     function self.shms(seconds, as_string)
       v.type(seconds, "number", 1, false)
@@ -1632,9 +1658,26 @@ local DateClass = Glu.glass.register({
       end
 
       if as_string then
+        -- Break the hours down further into years, months, and days.
+        local dd = math.floor(hh / 24)
+        local hours = hh % 24
+        local yy = math.floor(dd / DAYS_PER_YEAR)
+        dd = dd % DAYS_PER_YEAR
+        local mo = math.floor(dd / DAYS_PER_MONTH)
+        dd = dd % DAYS_PER_MONTH
+
         local r = {}
-        if hh ~= 0 then
-          r[#r + 1] = hh .. "h"
+        if yy ~= 0 then
+          r[#r + 1] = yy .. "y"
+        end
+        if mo ~= 0 then
+          r[#r + 1] = mo .. "mo"
+        end
+        if dd ~= 0 then
+          r[#r + 1] = dd .. "d"
+        end
+        if hours ~= 0 then
+          r[#r + 1] = hours .. "h"
         end
         if mm ~= 0 then
           r[#r + 1] = mm .. "m"
@@ -1643,11 +1686,15 @@ local DateClass = Glu.glass.register({
           r[#r + 1] = ss .. "s"
         end
 
-        return table.concat(r, " ") or "0s"
+        if #r == 0 then
+          return "0s"
+        end
+
+        return table.concat(r, " ") --[[@as string]]
       else
-        local result_hours = string.format("%02d", hh)
-        local result_minutes = string.format("%02d", mm)
-        local result_seconds = string.format("%02d", ss)
+        local result_hours = string.format("%02d", hh) --[[@as string]]
+        local result_minutes = string.format("%02d", mm) --[[@as string]]
+        local result_seconds = string.format("%02d", ss) --[[@as string]]
         return result_hours, result_minutes, result_seconds
       end
     end
@@ -1655,48 +1702,34 @@ local DateClass = Glu.glass.register({
 })
 
 
--- File: dependency_queue.lua
-local DependencyQueueClass = Glu.glass.register({
-  class_name = "DependencyQueueClass",
-  name = "dependency_queue",
-  extends = "queue",
-  call = "new_dependency_queue",
-  dependencies = { "queue", "table", "fd", "url", },
-  setup = function(___, self)
-    --- Builds a queue that installs any of the given Mudlet packages that are not already installed.
-    --- Filters out already-installed packages, downloads each remaining package into its own
-    --- temporary directory, installs it from there, and invokes the callback with success and a
-    --- message when finished.
+-- File: dependency_install.lua
+local DependencyInstallClass = Glu.glass.register({
+  name = "dependency_install",
+  class_name = "DependencyInstallClass",
+  dependencies = { "table", "fd", "url", },
+  setup = function(___, self, options)
+    self.options = options
+
+    --- Sets up one run of the dependency queue: queues a download and install
+    --- for each package and registers the event handlers that drive them.
     ---
-    ---@param packages table List of package descriptors, each a {name, url} table.
-    ---@param cb function Callback called with a success boolean and a message string when finished.
-    ---@return object self The dependency queue object.
-    function self.new_dependency_queue(packages, cb)
-      local installed = getPackages()
-      local not_installed = table.n_filter(packages, function(package)
-        return table.index_of(installed, package.name) == nil
-      end) or {}
-
-      -- We have no packages not installed, so just return as if we're done.
-      if #not_installed == 0 then
-        cb(true, "All dependencies are already installed.")
-        return
-      end
-
+    ---@return table self The install object.
+    function self.prepare()
       local id = ___.id()
-      local this = {
-        id = id,
-        cb = cb,
-        queue = self.new_queue(),
-        packages = not_installed,
-        current = nil,
-        handler_name = f "dependency_{id}_installed",
-      }
-      ___.table.add(self, this)
 
-      for _, package in ipairs(not_installed) do
+      self.id = id
+      self.cb = self.options.cb
+      self.timeout = self.options.timeout
+      self.queue = self.container.new_queue()
+      self.packages = self.options.packages
+      self.current = nil
+      self.handler_name = f "dependency_{id}_installed"
+
+      for _, package in ipairs(self.packages) do
         local func = function()
-          cecho("Installing dependency `<b>" .. package.name .. "</b>`...\n")
+          local name = package.name
+
+          cecho("Installing dependency `<b>" .. name .. "</b>`...\n")
 
           -- Mudlet's download and install events are global, and the URL they
           -- carry may have been rewritten by redirection, so the URL cannot
@@ -1709,116 +1742,233 @@ local DependencyQueueClass = Glu.glass.register({
           local ok, err = ___.fd.assure_dir(dir)
           if not ok then
             local reason = err or "unknown error"
-            self.cb(false, f "Could not create a temporary directory for `<b>{package.name}</b>`: {reason}\n")
-            self.clean_up()
+            self.fail("Could not create a temporary directory for `<b>" .. name .. "</b>`: " .. reason .. "\n")
             return
           end
 
           local parsed = ___.url.parse(package.url)
           local ext = parsed and parsed.file and string.match(parsed.file, "%.(%w+)$") or "mpackage"
+          local target = ___.fd.fix_path(dir .. "/" .. ___.id() .. "." .. ext)
 
           self.current = {
             package = package,
-            target = ___.fd.fix_path(dir .. "/" .. ___.id() .. "." .. ext),
+            target = target,
           }
 
-          downloadFile(self.current.target, package.url)
+          -- A refused download raises no event, so nothing else would end the queue.
+          local started, refusal = downloadFile(target, package.url)
+          if not started then
+            local reason = refusal or "unknown error"
+            self.fail("Failed to download dependency `<b>" .. name .. "</b>`: " .. reason .. "\nCleaning up.\n")
+            return
+          end
+
+          -- Mudlet can't cancel a download, so this only stops the waiting. If the
+          -- transfer does finish later, its file stays behind in the temp directory.
+          local timeout = self.timeout
+          if timeout then
+            self.current.timer = tempTimer(timeout, function()
+              if not self.is_ours(target) then return end
+
+              self.current.timer = nil
+              self.fail("Timed out downloading dependency `<b>" .. name .. "</b>` after " ..
+                timeout .. " seconds.\nCleaning up.\n")
+            end)
+          end
         end
 
         self.queue.push(func)
       end
 
       registerNamedEventHandler("glu", self.handler_name, "sysInstallPackage",
-        function(event, package, file)
+        function(_, installed_name, file, errors)
           -- sysInstallPackage reports the file Mudlet was asked to install, so
           -- the same UUID path that identifies our downloads identifies our
           -- installs. sysInstall carries only a package name, which any other
           -- component installing something of that name would also produce.
           if not self.is_ours(file) then return end
 
+          -- Mudlet adds the errors only when part of the package failed to load.
+          -- Left installed, a later run would find the package and report the
+          -- dependency as met. The name comes from the event because it is the
+          -- archive's own, which need not match the name we were given.
+          if errors then
+            local name = self.current.package.name
+            local removed, refusal = uninstallPackage(installed_name)
+            local outcome = removed and "It has been uninstalled." or
+                "It could not be uninstalled: " .. tostring(refusal)
+            self.fail("Dependency `<b>" .. name .. "</b>` installed with errors: " .. errors ..
+              "\n" .. outcome .. "\nCleaning up.\n")
+            return
+          end
+
           self.discard_temp()
           ___.table.shift(self.packages)
           tempTimer(1, function()
-            local q, count = self.queue.execute()
+            self.queue.execute()
             if #self.packages == 0 then
-              self.cb(true, nil)
+              -- Cleaned up first, so a callback that throws can't leave handlers behind.
               self.clean_up()
+              self.cb(true, nil)
             end
           end)
         end
       )
 
       registerNamedEventHandler("glu", self.handler_name .. "_download_done", "sysDownloadDone",
-        function(event, local_file)
+        function(_, local_file)
           if not self.is_ours(local_file) then return end
 
-          installPackage(self.current.target)
+          self.stop_timeout()
+
+          -- A refused install raises no event, so nothing else would end the queue.
+          local started, refusal = installPackage(self.current.target)
+          if not started then
+            local name = self.current.package.name
+            local reason = refusal or "unknown error"
+            self.fail("Failed to install dependency `<b>" .. name .. "</b>`: " .. reason .. "\nCleaning up.\n")
+            return
+          end
+
+          -- The install has finished by now and Mudlet raises sysInstallPackage
+          -- from a zero timer it has already set, so that fires before this one.
+          -- If the file is still current here, the event isn't coming: the package
+          -- was removed before it went out.
+          local target = self.current.target
+          tempTimer(0, function()
+            if self.current and self.current.target == target then
+              local name = self.current.package.name
+              self.fail("Dependency `<b>" .. name .. "</b>` was removed as soon as it was installed.\nCleaning up.\n")
+            end
+          end)
         end
       )
 
       registerNamedEventHandler("glu", self.handler_name .. "_download_error", "sysDownloadError",
-        function(event, err, local_file, url)
+        function(_, err, local_file)
           if not self.is_ours(local_file) then return end
 
           local name = self.current.package.name
           local reason = err or "unknown error"
 
-          self.discard_temp()
-          self.cb(false, f "Failed to download dependency `<b>{name}</b>`: {reason}\nCleaning up.\n")
-          self.clean_up()
+          self.fail("Failed to download dependency `<b>" .. name .. "</b>`: " .. reason .. "\nCleaning up.\n")
         end
       )
 
-      --- Determines whether a download or install event refers to the file this
-      --- queue is currently working on. The path was chosen by us and contains a UUID,
-      --- so an exact match is unambiguous and no guessing is required.
-      ---
-      ---@param local_file string? The local path reported by the download event.
-      ---@return boolean result Whether the event refers to our download.
-      function self.is_ours(local_file)
-        if not self.current or type(local_file) ~= "string" then return false end
-
-        return ___.fd.fix_path(local_file) == self.current.target
-      end
-
-      --- Removes the temporary file holding the current download, if any.
-      --- Safe to call more than once.
-      function self.discard_temp()
-        local current = self.current
-        if not current then return end
-
-        if ___.fd.file_exists(current.target) then ___.fd.rmfile(current.target) end
-
-        self.current = nil
-      end
-
-      --- Removes the registered event handlers and tears down the queue.
-      --- Deletes the named sysInstallPackage, sysDownloadDone and sysDownloadError
-      --- handlers, discards any temporary download, and clears the handler name
-      --- and queue.
-      function self.clean_up()
-        self.discard_temp()
-
-        deleteNamedEventHandler("glu", self.handler_name)
-        deleteNamedEventHandler("glu", self.handler_name .. "_download_done")
-        deleteNamedEventHandler("glu", self.handler_name .. "_download_error")
-        self.handler_name = nil
-        self.queue = nil
-      end
-
-      --- Begins executing the queue.
-      --- Executes the queue if it exists, otherwise returns a not-found error.
-      ---
-      ---@return any|nil result The result of the queue execution, or nil when the queue is not found.
-      ---@return string? err The error message "Queue not found" when the queue is missing.
-      function self.start()
-        if not self.queue then
-          return nil, "Queue not found"
-        end
-        return self.queue.execute()
-      end
-
       return self
+    end
+
+    --- Determines whether a download or install event refers to the file this
+    --- queue is currently working on. The path was chosen by us and contains a UUID,
+    --- so an exact match is unambiguous and no guessing is required.
+    ---
+    ---@param local_file string? The local path reported by the download event.
+    ---@return boolean result Whether the event refers to our download.
+    function self.is_ours(local_file)
+      if not self.current or type(local_file) ~= "string" then return false end
+
+      return ___.fd.fix_path(local_file) == self.current.target
+    end
+
+    --- Cancels the current download's timeout, if it has one.
+    --- Safe to call more than once.
+    function self.stop_timeout()
+      local current = self.current
+      if not current or not current.timer then return end
+
+      killTimer(current.timer)
+      current.timer = nil
+    end
+
+    --- Removes the temporary file holding the current download, if any, and
+    --- cancels its timeout. Safe to call more than once.
+    function self.discard_temp()
+      local current = self.current
+      if not current then return end
+
+      self.stop_timeout()
+
+      if ___.fd.file_exists(current.target) then ___.fd.rmfile(current.target) end
+
+      self.current = nil
+    end
+
+    --- Ends the queue: tears it down, including any temporary download, then
+    --- reports the failure through the callback. Cleaned up first, so a callback
+    --- that throws can't leave handlers behind.
+    ---
+    ---@param message string The failure message passed to the callback.
+    function self.fail(message)
+      self.clean_up()
+      self.cb(false, message)
+    end
+
+    --- Removes the registered event handlers and tears down the queue.
+    --- Deletes the named sysInstallPackage, sysDownloadDone and sysDownloadError
+    --- handlers, discards any temporary download, and clears the handler name
+    --- and queue.
+    function self.clean_up()
+      self.discard_temp()
+
+      deleteNamedEventHandler("glu", self.handler_name)
+      deleteNamedEventHandler("glu", self.handler_name .. "_download_done")
+      deleteNamedEventHandler("glu", self.handler_name .. "_download_error")
+      self.handler_name = nil
+      self.container.delete(self.queue.id)
+      self.queue = nil
+    end
+
+    --- Begins executing the queue.
+    --- Executes the queue if it exists, otherwise returns a not-found error.
+    ---
+    ---@return any|nil result The result of the queue execution, or nil when the queue is not found.
+    ---@return string? err The error message "Queue not found" when the queue is missing.
+    function self.start()
+      if not self.queue then
+        return nil, "Queue not found"
+      end
+      return self.queue.execute()
+    end
+  end
+})
+
+
+-- File: dependency_queue.lua
+local DependencyQueueClass = Glu.glass.register({
+  class_name = "DependencyQueueClass",
+  name = "dependency_queue",
+  extends = "queue",
+  call = "new_dependency_queue",
+  dependencies = { "queue", "table", },
+  setup = function(___, self)
+    --- Builds a queue that installs any of the given Mudlet packages that are not already installed.
+    --- Filters out already-installed packages, downloads each remaining package into its own
+    --- temporary directory, installs it from there, and invokes the callback with success and a
+    --- message when finished. Each call returns its own object, so queues can run side by side.
+    ---
+    ---@param packages table List of package descriptors, each a {name, url} table.
+    ---@param cb function Callback called with a success boolean and a message string when finished.
+    ---@param timeout number? Seconds to wait for each package to download. Waits indefinitely if omitted.
+    ---@return table|nil install The dependency install object, or nil when every package is already installed.
+    function self.new_dependency_queue(packages, cb, timeout)
+      ___.v.type(timeout, "number", 3, true)
+      -- The range tempTimer accepts.
+      ___.v.test(timeout == nil or (timeout > 0 and timeout < 86400), timeout, 3, true)
+
+      local installed = getPackages()
+      local not_installed = table.n_filter(packages, function(package)
+        return table.index_of(installed, package.name) == nil
+      end) or {}
+
+      -- We have no packages not installed, so just return as if we're done.
+      if #not_installed == 0 then
+        cb(true, "All dependencies are already installed.")
+        return
+      end
+
+      local gl = ___.get_glass("dependency_install")
+
+      return gl({ packages = not_installed, cb = cb, timeout = timeout }, self).prepare()
     end
   end
 })
@@ -1888,7 +2038,7 @@ local FdClass = Glu.glass.register({
       if not root then return nil, nil, nil end
 
       local len = utf8.len(root)
-      local dir, file = self.dir_file(path:sub(len + 1))
+      local dir, file = self.dir_file(path:sub(len + 1) --[[@as string]])
       if not dir then return nil, nil, nil end
 
       return root, dir, file
@@ -1905,7 +2055,7 @@ local FdClass = Glu.glass.register({
     function self.file_exists(path)
       ___.v.type(path, "string", 1, false)
 
-      local attr, message, code = lfs.attributes(path)
+      local attr = lfs.attributes(path)
       if not attr then return false end
 
       return attr.mode == "file"
@@ -1922,7 +2072,7 @@ local FdClass = Glu.glass.register({
     function self.dir_exists(path)
       ___.v.type(path, "string", 1, false)
 
-      local attr, message, code = lfs.attributes(path)
+      local attr = lfs.attributes(path)
       if not attr then return false end
 
       return attr.mode == "directory"
@@ -1930,7 +2080,7 @@ local FdClass = Glu.glass.register({
 
     --- Reads a file.
     ---@param path string The path to the file.
-    ---@param binary boolean Whether the file is binary (default false).
+    ---@param binary? boolean Whether the file is binary (default false).
     ---@return string|nil data The file contents, or nil on failure.
     ---@return string|nil error The error message, if the read failed.
     ---@return number|nil code The error code, if the read failed.
@@ -1988,9 +2138,10 @@ local FdClass = Glu.glass.register({
     --- Writes to a file.
     ---@param path string The path to the file.
     ---@param data string The data to write to the file.
-    ---@param overwrite boolean Whether to overwrite the file (default false).
-    ---@param binary boolean Whether the file is binary (default false).
-    ---@return string|table path The path to the file or nil, a table with the error and code, or the attributes of the file.
+    ---@param overwrite? boolean Whether to overwrite the file (default false).
+    ---@param binary? boolean Whether the file is binary (default false).
+    ---@return string|nil path The path to the file, or nil on failure.
+    ---@return table|nil info The attributes of the file, or a table with the error and code on failure.
     ---@example
     --- ```lua
     --- fd.write_file("path/to/file.txt", "contents of file")
@@ -2033,7 +2184,7 @@ local FdClass = Glu.glass.register({
       local num = num1 + num2
       if num == 0 then return path, 0 end
 
-      return result, num
+      return result --[[@as string]], num
     end
 
     --- Determines which path separator a path uses.
@@ -2130,11 +2281,11 @@ local FdClass = Glu.glass.register({
 
       path = self.fix_path(path)
       path = ___.string.append(path, sep)
-      local root
-      root, path, _ = self.root_dir_file(path)
-      if path[1] == sep then path = path:sub(2) end
+      local root, rest = self.root_dir_file(path)
+      if not root or not rest then return nil, "Invalid path '" .. path .. "'", nil end
+      if rest:sub(1, 1) == sep then rest = rest:sub(2) end
 
-      local dirs = path:split(sep)
+      local dirs = rest:split(sep)
       local target = root
       dirs = table.n_filter(dirs, function(dir) return dir ~= "" end)
 
@@ -2169,7 +2320,7 @@ local FdClass = Glu.glass.register({
       local parts = { rex.match(path, "^([a-zA-Z]:(\\\\{1,2}|/{1,2})|/{1,2})(?:.*)$") }
       if not parts then return nil end
 
-      local root, slash = parts[1], parts[2] or ""
+      local root = parts[1]
 
       return root
     end
@@ -2239,7 +2390,6 @@ local FdClass = Glu.glass.register({
       local result = {}
 
       for file in lfs.dir(path) do
-        local attr = lfs.attributes(path .. "/" .. file)
         table.insert(result, file)
       end
 
@@ -2300,7 +2450,7 @@ local FdClass = Glu.glass.register({
           ___.get_last_traceback_line())
       end,
 
-      path_table = function(paths, argument_index, allow_nil)
+      path_table = function(paths, _, allow_nil)
         ___.v.uniform(paths, "string", 1, false)
         ___.v.type(allow_nil, "boolean", 2, true)
 
@@ -2328,7 +2478,8 @@ local FuncClass = Glu.glass.register({
     ---@param func function The function to run after the delay.
     ---@param delay number The delay in seconds before the function runs.
     ---@param ... any Additional arguments passed to the function when it runs.
-    ---@return number timer_id The timer id returned by tempTimer.
+    ---@return number|nil timer_id The timer id returned by tempTimer, or nil if the timer could not be created.
+    ---@return string? err The reason the timer could not be created.
     ---@example
     --- ```lua
     --- func.delay(function() echo("hi") end, 5)
@@ -2338,10 +2489,13 @@ local FuncClass = Glu.glass.register({
       ___.v.type(delay, "number", 2, false)
 
       local args = { ... }
-      ---@diagnostic disable-next-line: return-type-mismatch
-      return tempTimer(delay, function()
+      local timer_id, err = tempTimer(delay, function()
         func(unpack(args))
       end)
+
+      if timer_id == -1 then return nil, err end
+
+      return timer_id
     end
 
     --- Wraps a function with another function.
@@ -2414,6 +2568,7 @@ local HttpClass = Glu.glass.register({
       ___.v.type(options.method, "string", 2, false)
       ___.v.regex(options.url, ___.regex.http_url, 1, false)
       ___.v.type(options.callback, "function", 1, false)
+      ___.v.type(options.data, "string", 1, true)
     end
 
     self.http_types = { "GET", "PUT", "POST", "DELETE" }
@@ -2468,6 +2623,7 @@ local HttpClass = Glu.glass.register({
     ---
     --- - `url` (`string`) - The URL to request.
     --- - `headers` (`table`) - The headers to send with the request.
+    --- - `data` (`string`) - The body to send with the request.
     ---
     ---@param options table The options for the request.
     ---@param cb function The callback function.
@@ -2489,6 +2645,7 @@ local HttpClass = Glu.glass.register({
     ---
     --- - `url` (`string`) - The URL to request.
     --- - `headers` (`table`) - The headers to send with the request.
+    --- - `data` (`string`) - The body to send with the request.
     ---
     ---@param options table The options for the request.
     ---@param cb function The callback function.
@@ -2533,6 +2690,8 @@ local HttpClass = Glu.glass.register({
     --- - `url` (`string`) - The URL to request.
     --- - `method` (`string`) - The HTTP method to use.
     --- - `headers` (`table`) - The headers to send with the request.
+    --- - `data` (`string`) - The body to send with the request. Used by `POST`,
+    ---   `PUT`, and custom methods.
     ---
     ---@param options table The options for the request.
     ---@param cb function The callback function.
@@ -2561,13 +2720,15 @@ local HttpClass = Glu.glass.register({
       return request
     end
 
-    --- Removes a tracked HTTP request from the request list by its id.
+    --- Removes a tracked HTTP request from the request list by its id, along
+    --- with its event handlers. Its callback will not be called.
     ---
     ---@param id string The id of the request to remove.
     ---@return nil result Nothing.
     function self.delete_request(id)
       for i = 1, #requests do
         if requests[i].id == id then
+          deleteAllNamedEventHandlers(id)
           table.remove(requests, i)
           break
         end
@@ -2605,7 +2766,7 @@ local HttpRequestClass = Glu.glass.register({
     --- `http_response`, writes the body to `saveTo` when requested, invokes the
     --- callback, and cleans up its event handlers.
     ---
-    ---@return object request The request object.
+    ---@return table request The request object.
     ---@example
     --- ```lua
     --- request.execute()
@@ -2629,9 +2790,8 @@ local HttpRequestClass = Glu.glass.register({
 
         assert(ob, "HTTP request not found")
 
-        local result = {}
         if self.options.saveTo and not response_data.error then
-          result.write = { ___.fd.write_file(self.options.saveTo, response_data.data) }
+          ___.fd.write_file(self.options.saveTo, response_data.data, true, true)
         end
 
         local cb = self.options.callback
@@ -2651,6 +2811,15 @@ local HttpRequestClass = Glu.glass.register({
           string.lower(self.options.method) or "custom"
       local uc = string.title(___.string.capitalize(lc))
 
+      self.method_lc = lc
+      self.method_uc = uc
+      self.custom = lc == "custom"
+
+      local func_name = string.format("%sHTTP", lc)
+      local func = _G[func_name]
+
+      assert(type(func) == "function", "HTTP method " .. func_name .. " not found")
+
       for _, event in ipairs({ "Done", "Error" }) do
         local event_mod = string.format("sys%sHttp%s", uc, event)
         table.insert(events, { event, event_mod })
@@ -2665,7 +2834,7 @@ local HttpRequestClass = Glu.glass.register({
       end
 
       for _, event in ipairs(events) do
-        local event_type, event_name = unpack(event)
+        local _, event_name = unpack(event)
         registerNamedEventHandler(
           self.id,
           event_name,
@@ -2678,13 +2847,32 @@ local HttpRequestClass = Glu.glass.register({
 
             local result
             local args = only_indexed({ ... })
+            -- Custom events carry the method third; the rest then line up
+            -- with every other event.
+            local method = self.custom and table.remove(args, 3) or nil
             if rex.match(e, "sys(?:\\w+)HttpError$") then
-              result = ___.table.allocate({ "error", "url", "server" }, args)
+              result = {
+                error = args[1],
+                url = args[2],
+                server = args[3],
+                body = args[4],
+                request_id = args[5],
+              }
             elseif rex.match(e, "sys(?:\\w+)HttpDone$") then
-              result = ___.table.allocate({ "url", "data", "server" }, args)
+              result = {
+                url = args[1],
+                data = args[2],
+                server = args[3],
+                request_id = args[4],
+              }
             else
               error("Unknown event: " .. e)
             end
+
+            -- Mudlet versions without request ids leave both sides nil.
+            if result.request_id ~= self.request_id then return end
+
+            result.method = method
 
             ___.table.add(response, result)
 
@@ -2693,24 +2881,26 @@ local HttpRequestClass = Glu.glass.register({
         )
       end
 
-      self.method_lc = lc
-      self.method_uc = uc
-      self.custom = lc == "custom"
+      local url, headers = self.options.url, self.options.headers
+      local data = self.options.data or ""
 
-      local func_name = string.format("%sHTTP", lc)
-      local func = _G[func_name]
+      local ok, err, _, request_id = pcall(function()
+        if self.custom then
+          return func(self.options.method, data, url, headers)
+        elseif lc == "post" or lc == "put" then
+          return func(data, url, headers)
+        end
 
-      assert(type(func) == "function", "HTTP method " .. func_name .. " not found")
-
-      local ok, err, result = pcall(
-        self.custom and
-          function() return func(self.options.method, self.options.url, self.options.headers) end or
-          function() return func(self.options.url, self.options.headers) end
-      )
+        return func(url, headers)
+      end)
 
       if not ok then
+        deleteAllNamedEventHandlers(self.id)
         error("Error calling HTTP method " .. tostring(self.custom) .. " " .. tostring(func) .. ": " .. tostring(err))
       end
+
+      self.request_id = request_id
+
       return self
     end
   end
@@ -3057,8 +3247,8 @@ local NumberClass = Glu.glass.register({
     end
 
     --- Calculates what percentage one number is of another
-    ---@param value number The current value
-    ---@param total number The total value
+    ---@param numerator number The current value
+    ---@param denominator number The total value
     ---@param round_digits? number Optional number of decimal places to round to
     ---@return number result The percentage
     ---@example
@@ -3130,7 +3320,7 @@ local NumberClass = Glu.glass.register({
       return self.sum(values) / #values
     end
   end,
-  valid = function(___, self)
+  valid = function(___)
     return {
       range = function(value, min, max, argument_index, nil_allowed)
         if nil_allowed and value == nil then
@@ -3179,7 +3369,7 @@ local PreferencesClass = Glu.glass.register({
       -- is never mutated. Mutating it aliases the returned prefs to the caller's
       -- defaults, which silently corrupts any later "fall back to defaults" logic.
       if not io.exists(path) then
-        return table.deepcopy(defaults)
+        return table.deepcopy(defaults) --[[@as table]]
       end
 
       local prefs = {}
@@ -3263,6 +3453,25 @@ local QueueClass = Glu.glass.register({
       return nil, f "Queue not found for id `{id}`."
     end
 
+    --- Removes a queue from the list of queues by its identifier. Tasks already
+    --- running are unaffected, and the queue object itself keeps working for
+    --- anything still holding it.
+    ---
+    ---@param id string The identifier of the queue to remove
+    ---@return boolean|nil removed True if the queue was removed, or nil if not found
+    ---@return string|nil err An error message if the queue could not be found
+    function self.delete(id)
+      ___.v.type(id, "string", 1, false)
+
+      for i, q in ipairs(self.queues) do
+        if q.id == id then
+          table.remove(self.queues, i)
+          return true
+        end
+      end
+      return nil, f "Queue not found for id `{id}`."
+    end
+
     --- Add a function to the end of a queue by its identifier.
     ---
     ---@param id string The identifier of the queue to add the function to
@@ -3287,7 +3496,7 @@ local QueueClass = Glu.glass.register({
     ---
     ---@param id string The identifier of the queue to shift from.
     ---@return any item The next item removed from the queue, or nil on failure.
-    ---@return string err An error message if the queue could not be found.
+    ---@return string|nil err An error message if the queue could not be found.
     function self.shift(id)
       ___.v.type(id, "string", 1, false)
 
@@ -3305,7 +3514,7 @@ local QueueStackClass = Glu.glass.register({
   name = "queue_stack",
   class_name = "QueueStackClass",
   dependencies = { "table" },
-  setup = function(___, self, opts, container)
+  setup = function(___, self, opts)
     local funcs = ___.table.n_cast(opts.funcs or {})
     ___.v.n_uniform(funcs, "function", 2, false)
 
@@ -3331,7 +3540,7 @@ local QueueStackClass = Glu.glass.register({
     --- Shifts the next task off the queue and executes it with the provided arguments.
     ---
     ---@param ... any The arguments to pass to the task function.
-    ---@return QueueStackClass self The queue object.
+    ---@return table self The queue object.
     ---@return number|nil count The number of remaining tasks, or nil when the queue is empty.
     ---@return any ... Any results returned by the executed task.
     function self.execute(...)
@@ -3360,7 +3569,7 @@ local RegexClass = Glu.glass.register({
   setup = function(___, self)
     self.http_url = "^(https?:\\/\\/)((([A-Za-z0-9-]+\\.)+[A-Za-z]{2,})|localhost)(:\\d+)?(\\/[^\\s]*)?$"
   end,
-  valid = function(___, self)
+  valid = function(___)
     return {
       regex = function(value, pattern, argument_index, nil_allowed)
         if nil_allowed and value == nil then
@@ -3839,7 +4048,7 @@ local StringClass = Glu.glass.register({
           table.insert(token_list, nearest_token)
 
           -- Continue with remaining text
-          work = work:sub(nearest_to + 1)
+          work = work:sub(nearest_to + 1) --[[@as string]]
         else
           -- No match found — remaining text gets default token
           table.insert(results, work)
@@ -3982,7 +4191,7 @@ local StringClass = Glu.glass.register({
       local curr_is_num = false
 
       for i = 1, #str do
-        local c = str:sub(i, i)
+        local c = str:sub(i, i) --[[@as string]]
         local new_is_num = self.is_numeric(c)
 
         if i > 1 and new_is_num ~= curr_is_num then
@@ -4433,7 +4642,7 @@ local TableClass = Glu.glass.register({
       local snipped = {}
       if not stop then stop = start end
       local count = stop - start + 1
-      for i = 1, count do
+      for _ = 1, count do
         table.insert(snipped, table.remove(t, start))
       end
       return t, snipped
@@ -4757,13 +4966,11 @@ local TableClass = Glu.glass.register({
     function self.unzip(tbl)
       ___.v.indexed(tbl, 1, false)
 
-      local size_of_table = #tbl
       -- Ensure that all sub-tables are of the same length
       local size_of_elements = #tbl[1]
       for _, t in ipairs(tbl) do ___.v.test(size_of_elements == #t, t, 1, false) end
 
       local num_new_sub_tables = size_of_elements -- yes, this is redundant, but it's more readable
-      local new_sub_table_size = size_of_table -- this is the size of the sub-tables
       local result = {}
 
       for i = 1, num_new_sub_tables do
@@ -5332,14 +5539,15 @@ local TimerClass = Glu.glass.register({
       local ok, result = pcall(def.func, def.args)
 
       if not ok then
-        return false, "error in multi timer with name " .. name .. ": " .. result
+        ___.timer.kill_multi(name)
+        return false, "error in multi timer with name " .. name .. ": " .. tostring(result)
       end
 
       table.remove(defs, 1)
       if #defs > 0 then
-        local result2 = ___.timer.multi(name, defs)
+        local result2, err = ___.timer.multi(name, defs)
         if not result2 then
-          return false, "error in multi timer with name " .. name .. ": " .. result2
+          return false, "error in multi timer with name " .. name .. ": " .. err
         end
       else
         ___.timer.kill_multi(name)
@@ -5351,8 +5559,9 @@ local TimerClass = Glu.glass.register({
     --- Creates nested timers and returns true if successful.
     ---@param name string The name of the multi timer.
     ---@param def table The definition of the multi timer.
-    ---@param delay number The delay between each timer.
-    ---@return boolean ok True if the multi timer was created, errors out if not.
+    ---@param delay? number The delay between each timer.
+    ---@return boolean ok True if the multi timer was created, false if the timer could not be created.
+    ---@return string|nil err The error message when the timer could not be created.
     ---@example
     --- ```lua
     --- -- At intervals of 5 seconds, print "hi", "there", "you", "amazing", and
@@ -5390,11 +5599,14 @@ local TimerClass = Glu.glass.register({
       -- Record the initial information
       self.multi_timers[name] = { def = def }
 
+      -- Nothing is waiting on this callback's result, so raising is the only
+      -- way a failure gets seen.
       local timer_id = tempTimer(def[1].delay, function()
-        perform_multi_timer_function(name)
+        local ok, err = perform_multi_timer_function(name)
+        if not ok then error(err, 0) end
       end)
 
-      if not timer_id then
+      if timer_id == -1 then
         ___.timer.kill_multi(name)
         return false, "error creating multi timer with name " .. name
       end
@@ -5451,7 +5663,7 @@ local TryClass = Glu.glass.register({
     ---
     ---@param f function The function to execute.
     ---@param ... any Arguments passed to the function.
-    ---@return object try The new try object for chaining.
+    ---@return table try The new try object for chaining.
     ---@example
     --- ```lua
     --- try.clone(function() error("boom") end):catch(function(e) end)
@@ -5470,7 +5682,7 @@ local TryClass = Glu.glass.register({
     ---
     ---@param f function The function to execute.
     ---@param ... any Arguments passed to the function.
-    ---@return object self The try object for chaining.
+    ---@return table self The try object for chaining.
     ---@example
     --- ```lua
     --- try.try(function() return 42 end):catch(function(e) end)
@@ -5506,7 +5718,7 @@ local TryClass = Glu.glass.register({
     --- is stored in the catch result.
     ---
     ---@param f function The handler to run with the try result.
-    ---@return object self The try object for chaining.
+    ---@return table self The try object for chaining.
     ---@example
     --- ```lua
     --- try.clone(function() error("boom") end):catch(function(e) print(e.error) end)
@@ -5536,7 +5748,7 @@ local TryClass = Glu.glass.register({
     --- that error is raised.
     ---
     ---@param f function The function to always run.
-    ---@return object self The try object for chaining.
+    ---@return table self The try object for chaining.
     ---@example
     --- ```lua
     --- try.clone(function() error("boom") end):finally(function(r) end)
@@ -5760,7 +5972,7 @@ local QueuableClass = Glu.glass.register({
       methods = { "push", "shift", "pop", "unshift" }
     }
   },
-  setup = function(___, self, opts, container)
+  setup = function(___, self)
     self.stack = {}
   end
 })

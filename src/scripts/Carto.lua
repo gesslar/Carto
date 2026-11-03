@@ -1184,9 +1184,10 @@ function Carto:UpdateDoors(room_id)
   local current_doors = getDoors(room_id) or {}
 
   for dir, door_info in pairs(doors) do
-    local old_status = current_doors[dir]
+    -- setDoor wants "up" and "down" in full, and all the others short.
+    local command = (dir == "up" or dir == "down") and dir or self.exits.reverse[dir]
+    local old_status = current_doors[command]
     d(f "Door {dir} - {old_status} -> {door_info.status}\n")
-    local command = self.exits.reverse[dir]
     local door_status = tonumber(door_info.status)
 
     local door_result, err = setDoor(room_id, command, door_status)
@@ -1205,7 +1206,7 @@ function Carto:UpdateDoors(room_id)
   end
 
   for dir, _ in pairs(current_doors) do
-    if not doors[self.exits.map[dir]] then
+    if not doors[self.exits.map[dir] or dir] then
       d(f "Deleting door {dir} in room {room_id}\n")
       setDoor(room_id, dir, 0)
     end
