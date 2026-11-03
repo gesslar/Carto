@@ -1,5 +1,6 @@
 {
   "name": "carto",
+  "version": "1.5.0",
   "scripts": {
     "build": "npx -y @gesslar/muddy",
     "test": "docker run --rm -v \"$PWD\":/workspace gesslardev/mudlet-busted",
