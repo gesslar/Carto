@@ -2,6 +2,9 @@
   "name": "carto",
   "scripts": {
     "build": "npx -y @gesslar/muddy",
+    "test": "docker run --rm -v \"$PWD\":/workspace gesslardev/mudlet-busted",
+    "test:tree": "docker run --rm -e BUSTED_OUTPUT=treeOutput -v \"$PWD\":/workspace gesslardev/mudlet-busted",
+    "docker:update": "docker pull gesslardev/mudlet-busted",
     "watch": "npx -y @gesslar/muddy -w",
     "major": "npx -y @gesslar/muddy version major --package && npm i",
     "minor": "npx -y @gesslar/muddy version minor --package && npm i",
@@ -9,5 +12,8 @@
     "update": "npx -y npm-check-updates -u && npm install",
     "update-glu": "curl -fsSL --create-dirs -o src/resources/vendor/Glu-single.lua https://github.com/gesslar/Glu/releases/latest/download/Glu-single.lua"
   },
-  "license": "0BSD"
+  "license": "0BSD",
+  "devDependencies": {
+    "@gesslar/glu": "^3.0.0"
+  }
 }
