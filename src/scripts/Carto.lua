@@ -1080,14 +1080,15 @@ function Carto:UpdateExits(room_id)
   local previous = self.info.previous
   local current = self.info.current
 
+  -- This goes by the exits of the room we left, so it doesn't need any from here.
+  self:LinkPreviousRoom(room_id)
+
   -- A server that leaves the exits out of the GMCP hasn't told us anything about
   -- them, which isn't the same as telling us there are none.
   if not current.exits then
     d("No exits in the GMCP for room {room_id}. Leaving its exits alone.\n")
     return
   end
-
-  self:LinkPreviousRoom(room_id)
 
   local current_exits = getRoomExits(room_id) or {}
   local current_stubs = getExitStubs1(room_id) or {}
@@ -1532,7 +1533,10 @@ function Carto:Step()
   -- Remove the current step as we've just executed it
   table.remove(self.speedwalk_path, 1)
 
-  self:ArmStepTimeout()
+  -- A script: exit can land, or end the walk, before it returns.
+  if self.step_in_flight then
+    self:ArmStepTimeout()
+  end
 end
 
 -- ----------------------------------------------------------------------------

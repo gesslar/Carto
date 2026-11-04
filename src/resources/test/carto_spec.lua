@@ -168,6 +168,12 @@ describe("Carto", function()
       assert.are.equal(getRoomIDbyHash("a"), getRoomExits(b).south)
     end)
 
+    it("should map the exit you walked even if the new room lists no exits", function()
+      local a = room({ hash = "a", name = "A", exits = { north = "b" } })
+      local b = room({ hash = "b", name = "B" })
+      assert.are.equal(b, getRoomExits(a).north)
+    end)
+
     it("should keep mapped exits when the GMCP has none", function()
       local a = room({ hash = "a", name = "A", exits = { north = "b" } })
       local b = room({ hash = "b", name = "B", exits = { south = "a" } })
@@ -423,6 +429,43 @@ describe("Carto", function()
       local function outlast_the_timeout()
         pumpEvents(400)
       end
+
+      describe("with a script: exit that finishes before it returns", function()
+        local script = "script: cartoSpecDuringScript()"
+        local a
+
+        before_each(function()
+          a = getRoomIDbyHash("a")
+          addSpecialExit(a, b, script)
+        end)
+
+        after_each(function()
+          _G.cartoSpecDuringScript = nil
+        end)
+
+        it("should not time out a step that has already landed", function()
+          _G.cartoSpecDuringScript = function()
+            room({ hash = "b", name = "B", exits = { south = "a" } })
+          end
+          Carto.prefs.speedwalk_delay = 0.6
+          walk({ script }, { b })
+          outlast_the_timeout()
+          assert.is_true(Carto.walking)
+          assert.is_false(printed("Something prevents you"))
+          pumpEvents(400)
+          assert.is_false(Carto.walking)
+          assert.is_true(printed("You have arrived"))
+        end)
+
+        it("should not time out a walk that has already been stopped", function()
+          _G.cartoSpecDuringScript = function()
+            expandAlias("walk stop", false)
+          end
+          walk({ script }, { b })
+          outlast_the_timeout()
+          assert.is_false(printed("Something prevents you"))
+        end)
+      end)
 
       it("should give up if the game says nothing", function()
         walk({ "n" }, { b })
