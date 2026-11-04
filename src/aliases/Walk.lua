@@ -3,20 +3,29 @@ local command, value = input:match("^(%S+)%s*(.*)$")
 
 if command == "slow" then
   command = "speed"
-  value = 1.0
+  value = Carto.config.speed_walk_slow
 elseif command == "fast" then
   command = "speed"
-  value = 0.5
+  value = Carto.config.speed_walk_fast
+end
+
+local position = tonumber(value)
+
+-- With no position these commands act on the current room or list every recall
+-- point, so a position that doesn't parse must not fall back to that.
+if (command == "remember" or command == "forget" or command == "recall")
+  and value ~= "" and not position then
+  echo("A recall position must be a number.\n")
+  return
 end
 
 if command == "remember" then
-  Carto:RememberRoom(value and tonumber(value) or nil)
+  Carto:RememberRoom(position)
 elseif command == "forget" then
-  Carto:ForgetRoom(value and tonumber(value) or nil)
+  Carto:ForgetRoom(position)
 elseif command == "recall" then
-  if value ~= "" then    -- ---@diagnostic disable-next-line: param-type-mismatch
-    ---@diagnostic disable-next-line: param-type-mismatch
-    Carto:RecallRoom(tonumber(value))
+  if position then
+    Carto:RecallRoom(position)
   else
     Carto:DisplayRecalls()
   end
@@ -27,8 +36,28 @@ elseif command == "stop" then
   if not walking then
     echo("You are not walking.\n")
   else
-    Carto:ResetWalking(false, "User stopped the walk")
+    Carto:ResetWalking(false, "User stopped the walk", "sysSpeedwalkStopped")
     echo("Speedwalk stopped.\n")
+  end
+elseif command == "timeout" then
+  if value ~= "" then
+    Carto:SetSpeedwalkTimeout(value)
+  else
+    echo("Current walk timeout is " .. Carto.prefs.speedwalk_timeout .. " seconds.\n")
+  end
+elseif command == "pause" then
+  Carto:PauseWalking()
+elseif command == "resume" then
+  Carto:ResumeWalking()
+elseif command == "path" then
+  local first, second = value:match("^(%d+)%s*(%d*)$")
+
+  if not first then
+    echo("Syntax: walk path [from_id] <to_id>\n")
+  elseif second ~= "" then
+    Carto:DisplayPath(tonumber(first), tonumber(second))
+  else
+    Carto:DisplayPath(nil, tonumber(first))
   end
 elseif command == "speed" then
   if value ~= "" then

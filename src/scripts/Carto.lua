@@ -36,6 +36,14 @@ Carto = Carto or {
     mode = "quick",
     speedwalk_delay = 0.0,     -- Speedwalk delay
     speedwalk_delay_min = 0.0, -- Minimum speedwalk delay
+    speedwalk_timeout = 5.0,   -- How long to wait for a step to land
+    recalls = {},              -- Recall points for rooms
+    -- The commands for getting through a door, which vary from game to game.
+    -- {dir} is replaced with the full name of the direction.
+    doors = {
+      open = "open {dir}",
+      unlock = "unlock {dir}",
+    },
     gmcp = {
       -- The event that triggers Carto
       event = "gmcp.Room.Info",
@@ -229,22 +237,25 @@ Carto = Carto or {
   },
   door_changes = {},
   speedwalk_path = {},   -- Speedwalk path
-  move_tracking = {},    -- Move tracking for room movements
   walk_timer = nil,      -- Walk timer
   walk_timer_name = nil, -- Walk timer name
+  step_timeout_name = script_name .. ".step_timeout", -- Can be cancelled before Setup
   walk_step = nil,       -- The next room id for the speedwalk
   dependencies = {
     { name = "Helper", url = "https://github.com/gesslar/Helper/releases/latest/download/Helper.mpackage" },
-    { name = "mpkg",   url = "https://mudlet.github.io/mudlet-package-repository/packages/mpkg.mpackage" },
   },
   debug = false,
   glu = require("__PKGNAME__/vendor/Glu-single")("__PKGNAME__"),
 }
 
--- For debugging
-local function d(text)
+-- For debugging. This takes the f template rather than its result, so that nothing
+-- is evaluated with debugging off, and a template that can't be evaluated shows as
+-- it was written instead of breaking the code it's reporting on. f finds the
+-- caller's locals by walking up the stack, so they still resolve from in here.
+local function d(template)
   if _d and Carto.debug == true then
-    _d(text, { colour = "maroon", skip = 1 })
+    local ok, text = pcall(f, template)
+    _d(ok and text or template, { colour = "maroon", skip = 1 })
   end
 end
 
@@ -253,49 +264,11 @@ end
 -- ----------------------------------------------------------------------------
 
 function Carto:LoadPreferences()
-  -- Glu handles file existence, load, and the top-level merge. It merges onto a
-  -- copy of the defaults, so self.default stays pristine for the nested gmcp
-  -- merge below.
+  -- Glu handles file existence, load, and a recursive merge onto a copy of the
+  -- defaults, so anything missing from the saved file is filled in at any depth.
   self.prefs = self.glu.preferences.load(
     nil, self.config.preferences_file, self.default
   )
-
-  -- Glu's merge is shallow, so walk the defaults and fill in anything missing,
-  -- including the nested gmcp / properties tables that a shallow merge would skip.
-  for key, value in pairs(self.default) do
-    if key ~= "gmcp" then
-      if self.prefs[key] == nil then
-        self.prefs[key] = value
-      end
-    else
-      if self.prefs.gmcp == nil then
-        self.prefs.gmcp = self.default.gmcp
-      else
-        for k, v in pairs(value) do
-          if k ~= "properties" then
-            if self.prefs.gmcp[k] == nil then
-              self.prefs.gmcp[k] = v
-            end
-          else
-            if self.prefs.gmcp.properties == nil then
-              self.prefs.gmcp.properties = self.default.gmcp.properties
-            else
-              for k, v in pairs(v) do
-                if self.prefs.gmcp.properties[k] == nil then
-                  self.prefs.gmcp.properties[k] = v
-                end
-              end
-            end
-          end
-        end
-      end
-    end
-  end
-
-  -- Now for recalls
-  if self.prefs.recalls == nil then
-    self.prefs.recalls = {}
-  end
 
   self:UpdateGMCPHandler()
 end
@@ -305,32 +278,6 @@ function Carto:SavePreferences()
     nil, self.config.preferences_file, self.prefs
   )
   self:UpdateGMCPHandler()
-end
-
-function Carto:SetPreference(key, value)
-  if not self.prefs then
-    self.prefs = {}
-  end
-
-  if not self.default[key] then
-    cecho(f "<orange_red>Unknown preference {key}.\n")
-    return
-  end
-
-  if key == "speedwalk_delay" then
-    value = tonumber(value)
-  elseif key == "speedwalk_delay_min" then
-    value = tonumber(value)
-  else
-    cecho(f "<orange_red>Unknown preference {key}.\n")
-    return
-  end
-
-  self.prefs[key] = value
-  self:SavePreferences()
-  self:LoadPreferences()
-
-  cecho(f "<chartreuse>Preference {key} set to {value}.\n")
 end
 
 -- ----------------------------------------------------------------------------
@@ -348,9 +295,6 @@ function Carto:Setup(event, package)
   -- Set custom environment colors for terrain types
   self:SetupEnvironment()
 
-  -- Register event handlers
-  local handler
-
   self.walk_timer_name = self.config.prefix .. "walk_timer"
 
   for tag_name, tag_info in pairs(self.tags) do
@@ -361,17 +305,12 @@ function Carto:Setup(event, package)
     end
   end
 
-  -- We need to add the gmcp one now based on the preferences
-  if self.prefs.gmcp.event then
-    registerNamedEventHandler(
-      self.config.name,
-      self.prefs.gmcp.event,
-      self.prefs.gmcp.event,
-      function(...) self:EventHandler(...) end
-    )
-  end
-
   gmod.enableModule(self.config.name, "Room")
+
+  -- The same event the generic mapper raises, for scripts waiting on a mapper.
+  if event == "sysLoadEvent" or event == "sysInstall" then
+    raiseEvent("mapperScriptLoaded", self.config.package_name)
+  end
 
   if event == "sysInstall" then
     tempTimer(1, function()
@@ -421,16 +360,13 @@ function Carto:SetupEventHandlers()
     "carto.config",
   }
 
-  local registered_handlers = getNamedEventHandlers(self.config.name) or {}
-  -- Register persistent event handlers
+  -- Register persistent event handlers. Registering a name again replaces it.
   for _, event in ipairs(self.event_handlers) do
     local handler = self.config.name .. "." .. event
-    if not registered_handlers[handler] then
-      local result, err = registerNamedEventHandler(self.config.name, handler, event,
-        function(...) self:EventHandler(...) end)
-      if not result then
-        cecho("<orange_red>Failed to register event handler for " .. event .. "\n")
-      end
+    local result = registerNamedEventHandler(self.config.name, handler, event,
+      function(...) self:EventHandler(...) end)
+    if not result then
+      cecho("<orange_red>Failed to register event handler for " .. event .. "\n")
     end
   end
 end
@@ -451,8 +387,6 @@ function Carto:EventHandler(event, ...)
     self:Teardown(event, ...)   -- no args
   elseif self.prefs and self.prefs.gmcp and event == self.prefs.gmcp.event then
     self:Move(event, ...)       -- arg1 is the GMCP package name
-  elseif event == "carto.AddOrUpdateRoomconfig" then
-    self:Config(event, ...)
   elseif event == "carto.config" then
     self:Config(event, ...)
   end
@@ -470,15 +404,22 @@ registerNamedEventHandler(
 Carto:SetupEventHandlers()
 
 function Carto:UpdateGMCPHandler()
+  -- The handler is named after its event, so the one to replace goes by whichever
+  -- event it was registered for, which may no longer be the one in the preferences.
+  if self.gmcp_handler then
+    deleteNamedEventHandler(self.config.name, self.gmcp_handler)
+    self.gmcp_handler = nil
+  end
+
   -- We need to add the gmcp one now based on the preferences
   if self.prefs.gmcp.event then
-    deleteNamedEventHandler(self.config.name, self.prefs.gmcp.event)
     registerNamedEventHandler(
       self.config.name,
       self.prefs.gmcp.event,
       self.prefs.gmcp.event,
       function(...) self:EventHandler(...) end
     )
+    self.gmcp_handler = self.prefs.gmcp.event
   end
 end
 
@@ -529,7 +470,21 @@ function Carto:Config(event, setting, value)
   elseif setting == "config" then
     self:DisplayGMCPConfig(event)
     return
+  elseif setting == "room" then
+    if value and value ~= "" and not tonumber(value) then
+      cecho("<orange_red>Syntax: carto room [room_id]\n")
+      return
+    end
+    self:DisplayRoom(tonumber(value))
+    return
+  elseif setting == "doors" then
+    self:ConfigDoors(value)
+    return
   elseif setting == "event" then
+    if not value or value == "" then
+      cecho(f "<orange_red>Syntax: carto event <event>\n")
+      return
+    end
     self.prefs.gmcp.event = value
   elseif setting == "expect_coordinates" then
     if value == "true" then
@@ -538,6 +493,7 @@ function Carto:Config(event, setting, value)
       self.prefs.gmcp.expect_coordinates = false
     else
       cecho(f "<orange_red>Syntax: carto expect_coordinates <true|false>\n")
+      return
     end
   elseif setting == "expect_hash" then
     if value == "true" then
@@ -546,6 +502,7 @@ function Carto:Config(event, setting, value)
       self.prefs.gmcp.expect_hash = false
     else
       cecho(f "<orange_red>Syntax: carto expect_hash <true|false>\n")
+      return
     end
   elseif setting == "mode" then
     if value ~= "quick" and value ~= "normal" then
@@ -557,7 +514,7 @@ function Carto:Config(event, setting, value)
     end
   elseif setting == "properties" then
     if not value or value == "" then
-      helper.print({ text = self.help.topics.carto_properties, styles = self.help_styles })
+      self:DisplayGMCPProperties()
       return
     else
       local parts = value:split(" ")
@@ -585,6 +542,33 @@ function Carto:Config(event, setting, value)
   self:SavePreferences()
 end
 
+---Shows or sets the door commands. These come from the user and go to the game, so
+---they're only ever filled in with the direction, never evaluated.
+---@param value string|nil "<open|unlock> <command>", or nothing to show them
+function Carto:ConfigDoors(value)
+  local action, command = (value or ""):match("^(%S*)%s*(.*)$")
+
+  if action == "" then
+    cecho("<hot_pink>Carto door commands:\n")
+    for _, name in ipairs({ "open", "unlock" }) do
+      cecho(f "<hot_pink>  {name}<reset> = ")
+      echo(self.prefs.doors[name] .. "\n")
+    end
+    return
+  end
+
+  if not self.default.doors[action] or command == "" then
+    cecho("<orange_red>Syntax: carto doors <open|unlock> <command>\n")
+    return
+  end
+
+  self.prefs.doors[action] = command
+  self:SavePreferences()
+
+  cecho(f "<chartreuse>Setting door command {action} to: ")
+  echo(command .. "\n")
+end
+
 function Carto:DisplayGMCPConfig(event)
   cecho("<hot_pink>Carto GMCP config:\n\n")
   -- Display base config
@@ -596,10 +580,14 @@ function Carto:DisplayGMCPConfig(event)
 
   -- Display properties config
   if self.prefs.gmcp.properties then
-    cecho("  <hot_pink>properties:\n")
-    for property, value in pairs(self.prefs.gmcp.properties) do
-      cecho(f "<hot_pink>  {property}<reset> = {tostring(value)}\n")
-    end
+    self:DisplayGMCPProperties()
+  end
+end
+
+function Carto:DisplayGMCPProperties()
+  cecho("  <hot_pink>properties:\n")
+  for property, value in pairs(self.prefs.gmcp.properties) do
+    cecho(f "<hot_pink>  {property}<reset> = {tostring(value)}\n")
   end
 end
 
@@ -607,24 +595,13 @@ end
 -- Utility Functions
 -- ----------------------------------------------------------------------------
 
----@param str string
----@param delimiter string
----@return table
-function Carto:Explode(str, delimiter)
-  local result = {}
-  local pattern = "([^" .. delimiter .. "]+)" -- This pattern correctly matches non-delimiter characters
-
-  for match in str:gmatch(pattern) do
-    table.insert(result, match)
-  end
-
-  return result
-end
-
 ---@param event string
 ---@param ... any
 function Carto:Disconnect(event, ...)
   self:ResetWalking(true, "Disconnected from the mud.")
+
+  -- Wherever we turn up next, we won't have walked there from this room.
+  self.info = {}
 end
 
 -- ----------------------------------------------------------------------------
@@ -688,13 +665,13 @@ end
 
 ---@param gmcp_package string
 function Carto:Move(event, gmcp_package)
-  d(f "Event = {event}, GMCP package = {gmcp_package}\n")
+  d("Event = {event}, GMCP package = {gmcp_package}\n")
 
   local gmcp_table = self:TableFromPackage(gmcp_package) or {}
 
   self.info.previous = self.info.current
 
-  d(f [[We expect {self.prefs.gmcp.expect_hash and "hash" or "vnum"}]])
+  d([[We expect {self.prefs.gmcp.expect_hash and "hash" or "vnum"}]])
 
   if self.prefs.gmcp.expect_hash then
     if not gmcp_table[self.prefs.gmcp.properties.hash] then return end
@@ -702,7 +679,7 @@ function Carto:Move(event, gmcp_package)
     if not gmcp_table[self.prefs.gmcp.properties.vnum] then return end
   end
 
-  d(f [[Received {self.prefs.gmcp.expect_hash and "hash" or "vnum"} {gmcp_table[self.prefs.gmcp.expect_hash and "hash" or "vnum"]}]])
+  d([[Received {self.prefs.gmcp.expect_hash and "hash" or "vnum"} {gmcp_table[self.prefs.gmcp.expect_hash and "hash" or "vnum"]}]])
 
   -- Record the room we've entered
   self.info.current = {
@@ -712,21 +689,21 @@ function Carto:Move(event, gmcp_package)
     name = gmcp_table[self.prefs.gmcp.properties.name],
     environment = gmcp_table[self.prefs.gmcp.properties.environment],
     symbol = gmcp_table[self.prefs.gmcp.properties.symbol],
-    exits = table.deepcopy(gmcp_table[self.prefs.gmcp.properties.exits]),
-    doors = table.deepcopy(gmcp_table[self.prefs.gmcp.properties.doors]),
+    exits = self:NormaliseDirections(gmcp_table[self.prefs.gmcp.properties.exits]),
+    doors = self:NormaliseDirections(gmcp_table[self.prefs.gmcp.properties.doors]),
     type = gmcp_table[self.prefs.gmcp.properties.type],
     subtype = gmcp_table[self.prefs.gmcp.properties.subtype],
     icon = gmcp_table[self.prefs.gmcp.properties.icon],
   }
 
   local room_id = self:AddOrUpdateRoom(self.info.current)
-  d(f "Room ID for {self.info.current.name} is {room_id}\n")
+  d("Room ID for {self.info.current.name} is {room_id}\n")
   if room_id == -1 then
     cecho(f "<orange_red>Failed to add room.\n")
     return
   end
 
-  d(f "Recording room ID {room_id} for room {getRoomName(room_id)}\n")
+  d("Recording room ID {room_id} for room {getRoomName(room_id)}\n")
   self.info.current.room_id = room_id
 
   self:UpdateCoordinates(room_id, gmcp_table)
@@ -735,50 +712,38 @@ function Carto:Move(event, gmcp_package)
 
   centerview(room_id)
 
-  -- Keep track of the path we're walking so we can detect if we've veered
-  -- off the path. Only record the move if we're actually walking.
-  if self.walking then
-    if next(self.speedwalk_path) then
-      -- If the room we've entered is the room we're expected to be in,
-      -- then record the move for later comparison.
-      if self.walk_step == self.info.current.room_id then
-        if not next(self.move_tracking) then
-          self.move_tracking = {}
-        end
-
-        table.insert(self.move_tracking, {
-          prev_room_id = self.info.previous.room_id,
-          current_room_id = self.info.current.room_id,
-        })
-      end
-    end
-  end
-
-  d(f "Updating map.\n")
+  d("Updating map.\n")
   updateMap()
 
-  local current_room_id, previous_room_id
-  if self.info.current and self.info.current.room_id then
-    current_room_id = self.info.current.room_id
-  end
-  if self.info.previous and self.info.previous.room_id then
-    previous_room_id = self.info.previous.room_id
-  end
-
-  raiseEvent("onMoveMap", current_room_id)
+  raiseEvent("onMoveMap", room_id)
 
   if table.size(self.door_changes) > 0 then
-    d(f "Updating doors.\n")
+    d("Updating doors.\n")
     for _, door in ipairs(self.door_changes) do
-      d(f "Door {door.name} in room {door.room_id} changed to {door.status}.\n")
+      d("Door {door.command} in room {door.room_id} changed to {door.door_status}.\n")
       raiseEvent("onDoorChange", door.room_id, door.command, door.door_status, door.old_status)
     end
   end
 
-  d(f "Walking = {self.walking}\n")
-  -- Take the next step in the speedwalk
-  if self.walking then
-    resumeNamedTimer(self.config.name, self.walk_timer_name)
+  d("Walking = {self.walking}\n")
+
+  -- A room also updates without anyone having moved, as when anybody opens a door
+  -- in it, and that says nothing about the step we're waiting on.
+  local previous = self.info.previous
+  if not previous or previous.room_id ~= room_id then
+    self.step_in_flight = false
+    self:CancelStepTimeout()
+
+    -- Take the next step in the speedwalk, at the current speed, which may have
+    -- changed since the last one.
+    if self.walking and not self.paused then
+      registerNamedTimer(
+        self.config.name,
+        self.walk_timer_name,
+        self.prefs.speedwalk_delay,
+        function() self:Step() end
+      )
+    end
   end
 end
 
@@ -792,40 +757,41 @@ end
 ---@param info table
 function Carto:AddOrUpdateRoom(info)
   local room_id
-  local door_status = {}
 
   if self.prefs.gmcp.expect_hash then
     room_id = getRoomIDbyHash(info.hash)
-    d(f "The room we have entered doesn't exist yet.\n")
+    d("The room we have entered doesn't exist yet.\n")
     if room_id == -1 then
       room_id = createRoomID()
       if not addRoom(room_id) then
-        d(f "Failed to add room\n")
+        d("Failed to add room\n")
         return -1
       end
       setRoomIDbyHash(room_id, info.hash)
-      d(f "Added room {room_id} with hash {info.hash}\n")
+      info.is_new = true
+      d("Added room {room_id} with hash {info.hash}\n")
     else
-      d(f "Room {room_id} already exists with hash {info.hash}\n")
+      d("Room {room_id} already exists with hash {info.hash}\n")
     end
   else
-    d(f "Expecting vnum\n")
-    d(f "Vnum: {info.vnum}\n")
+    d("Expecting vnum\n")
+    d("Vnum: {info.vnum}\n")
     local name = getRoomName(info.vnum)
     if not name then
-      d(f "Adding room\n")
+      d("Adding room\n")
       local result = addRoom(info.vnum)
-      d(f "Result: {result}\n")
+      d("Result: {result}\n")
       if not result then
-        d(f "Failed to add room\n")
+        d("Failed to add room\n")
         return -1
       else
-        d(f "Added room {name}\n")
+        d("Added room {name}\n")
       end
+      info.is_new = true
       room_id = info.vnum
-      d(f "Setting room ID to {room_id}\n")
+      d("Setting room ID to {room_id}\n")
     else
-      d(f "Room ID already exists as {name}\n")
+      d("Room ID already exists as {name}\n")
       room_id = info.vnum
     end
   end
@@ -852,34 +818,30 @@ function Carto:AddOrUpdateRoom(info)
     self:SetupEnvironment()
   end
 
-  local env_id
-  if info[self.prefs.gmcp.properties.environment] then
-    if self.terrain.types[info.environment] then
-      env_id = self.terrain.types[info.environment].id
-    else
-      env_id = self.terrain.types["default"].id
-    end
-  else
-    env_id = self.terrain.types["default"].id
-  end
+  local terrain = self.terrain.types[info.environment] or self.terrain.types["default"]
+  local env_id = terrain.id
 
+  -- Terrain rules only apply when the terrain changes, which includes a room's
+  -- first visit, so that locks and weights set by hand survive walking through.
   if getRoomEnv(room_id) ~= env_id then
     setRoomEnv(room_id, env_id)
-  end
 
-  if table.contains(self.terrain.prevent, env_id) then
-    lockRoom(room_id, true)
-  else
-    lockRoom(room_id, false)
-    if table.contains(self.terrain.avoid, env_id) then
-      setRoomWeight(room_id, self.terrain.avoid[env_id])
+    if table.contains(self.terrain.prevent, env_id) then
+      lockRoom(room_id, true)
     else
-      setRoomWeight(room_id, 1)
+      lockRoom(room_id, false)
+      if table.contains(self.terrain.avoid, env_id) then
+        setRoomWeight(room_id, self.terrain.avoid[env_id])
+      else
+        setRoomWeight(room_id, 1)
+      end
     end
   end
 
   if info.icon and utf8.len(info.icon) > 0 then
     setRoomChar(room_id, info.icon)
+  elseif type(info.symbol) == "string" and utf8.len(info.symbol) > 0 then
+    setRoomChar(room_id, info.symbol)
   elseif info.subtype and table.contains(self.glyphs, info.subtype) then
     setRoomChar(room_id, self.glyphs[info.subtype])
   elseif info.type and table.contains(self.glyphs, info.type) then
@@ -922,12 +884,31 @@ function Carto:NormaliseCoordinates(coords)
   return result
 end
 
+---Normalises a GMCP table keyed by direction so that standard directions always
+---use their full names, whichever form the server sends. Everything downstream,
+---as well as getRoomExits, works in full names. Other keys are left as they are.
+---@param by_direction any The raw exits or doors value from GMCP
+---@return table|nil normalised A copy of the table, or nil if there wasn't one
+function Carto:NormaliseDirections(by_direction)
+  if type(by_direction) ~= "table" then
+    return nil
+  end
+
+  local result = {}
+
+  for dir, value in pairs(by_direction) do
+    result[self.exits.map[dir] or dir] = table.deepcopy(value)
+  end
+
+  return result
+end
+
 function Carto:UpdateCoordinates(room_id, gmcp_table)
-  d(f "Updating coordinates for room {tostring(room_id)}\n")
+  d("Updating coordinates for room {tostring(room_id)}\n")
 
   if self.info.previous and self.info.previous.room_id then
     if room_id == self.info.previous.room_id then
-      d(f "We have not moved to a new room. Exiting.\n")
+      d("We have not moved to a new room. Exiting.\n")
       return
     end
   end
@@ -935,30 +916,39 @@ function Carto:UpdateCoordinates(room_id, gmcp_table)
   local gmcp_coords
 
   if self.prefs.gmcp.expect_coordinates then
-    d(f "We are expecting coordinates.\n")
+    d("We are expecting coordinates.\n")
     gmcp_coords = self:NormaliseCoordinates(gmcp_table[self.prefs.gmcp.properties.coords])
   end
 
   if gmcp_coords and #gmcp_coords == 3 then
     self.info.current.coords = gmcp_coords
-    d(f "Coordinates received via GMCP: {table.concat(self.info.current.coords, ', ')}\n")
+    d("Coordinates received via GMCP: {table.concat(self.info.current.coords, ', ')}\n")
   else
     if self.prefs.gmcp.expect_coordinates then
-      d(f "Expected GMCP coordinates but none were usable; calculating instead.\n")
+      d("Expected GMCP coordinates but none were usable; calculating instead.\n")
     else
-      d(f "We are not expecting coordinates.\n")
+      d("We are not expecting coordinates.\n")
+    end
+
+    -- Calculating is only a best guess at where to put a room we've never seen.
+    -- A room already on the map stays put, or logging in would send it to the
+    -- origin and teleporting would stack it on top of the room we came from.
+    if not self.info.current.is_new then
+      d("Room {room_id} is already on the map. Keeping its coordinates.\n")
+      self.info.current.coords = { getRoomCoordinates(room_id) }
+      return
     end
 
     local prev_room_id = self.info.previous and self.info.previous.room_id or nil
     self.info.current.coords = self:CalculateCoordinates(room_id, prev_room_id)
-    d(f "Calculated coordinates: {table.concat(self.info.current.coords, ', ')}\n")
+    d("Calculated coordinates: {table.concat(self.info.current.coords, ', ')}\n")
   end
 
   if #self.info.current.coords == 3 then
     local x, y, z = unpack(self.info.current.coords)
     setRoomCoordinates(room_id, x, y, z)
   else
-    d(f "Coordinates not set for room {room_id}\n")
+    d("Coordinates not set for room {room_id}\n")
   end
 end
 
@@ -972,13 +962,13 @@ end
 ---@param curr_room_id number
 ---@param prev_room_id number|nil
 function Carto:CalculateCoordinates(curr_room_id, prev_room_id)
-  d(f "Calculating coordinates for room {tostring(curr_room_id)}\n")
+  d("Calculating coordinates for room {tostring(curr_room_id)}\n")
   local default_coordinates = { 0, 0, 0 }
 
   if not prev_room_id then return default_coordinates end
 
   local x, y, z = getRoomCoordinates(prev_room_id)
-  d(f "Previous room coordinates: {table.concat({x, y, z}, ', ')}\n")
+  d("Previous room coordinates: {table.concat({x, y, z}, ', ')}\n")
   local coords
   if not x or not y or not z then
     coords = default_coordinates
@@ -986,7 +976,7 @@ function Carto:CalculateCoordinates(curr_room_id, prev_room_id)
     coords = { x, y, z }
   end
 
-  d(f "Previous room: {getRoomName(prev_room_id)} ({prev_room_id})\n")
+  d("Previous room: {getRoomName(prev_room_id)} ({prev_room_id})\n")
 
   local shift = { 0, 0, 0 }
   local compare_field
@@ -996,21 +986,17 @@ function Carto:CalculateCoordinates(curr_room_id, prev_room_id)
     compare_field = "vnum"
   end
 
-  d(f "Comparing current and previous {compare_field}\n")
-  for dir, hash in pairs(self.info.previous.exits) do
+  d("Comparing current and previous {compare_field}\n")
+  for dir, hash in pairs(self.info.previous.exits or {}) do
     local current_hash = self.info.current[compare_field]
-    d(f "  Checking {compare_field}: {dir} - {hash} against {current_hash}")
+    d("  Checking {compare_field}: {dir} - {hash} against {current_hash}")
     if hash == current_hash and self.exits.vectors.name[dir] then
-      if self.exits.vectors.name[dir] then
-        shift = self.exits.vectors.name[dir]
-        break
-      else
-        cecho(f "<orange_red>No shift vector found for {k}.\n")
-      end
+      shift = self.exits.vectors.name[dir]
+      break
     end
   end
 
-  d(f "Shift vector: {table.concat(shift, ', ')}\n")
+  d("Shift vector: {table.concat(shift, ', ')}\n")
   for n = 1, 3 do
     coords[n] = coords[n] + shift[n]
   end
@@ -1018,151 +1004,175 @@ function Carto:CalculateCoordinates(curr_room_id, prev_room_id)
   return coords
 end
 
----@param room_id number
-function Carto:UpdateExits(room_id)
-  d(f "Updating exits for room {room_id} - {getRoomName(room_id)}\n")
-
-  local prev = self.info.previous or {}
-  local current = self.info.current or {}
-
-  local current_exits = getRoomExits(room_id) or {}
-  local current_stubs = getExitStubs1(room_id) or {}
-  local prev_exits
-
-  if prev.exits then
-    prev_exits = prev.exits
-  else
-    prev_exits = {}
-  end
-
-  local compare_field
+---Finds the room an exit from the GMCP leads to.
+---@param destination string|number The exit's hash or vnum
+---@return number room_id The room's ID, or -1 if it isn't on the map yet
+function Carto:ExitRoomId(destination)
   if self.prefs.gmcp.expect_hash then
-    compare_field = "hash"
-  else
-    compare_field = "vnum"
+    return getRoomIDbyHash(destination)
   end
 
-  -- Iterate through the exits from the GMCP event in the room where we have
-  -- arrived, adding new exit stubs for places we haven't seen before.
-  -- If the exit leads to the room we just left, connect its exit stub
-  -- to this room.
-  for dir, id in pairs(current.exits) do
-    if mudlet.translations[mudlet.translations.interfacelanguage][dir] then
-      local exit_room_id
-      local done = false
+  local vnum = tonumber(destination)
 
-      if self.prefs.gmcp.expect_hash then
-        exit_room_id = getRoomIDbyHash(id)
-      else
-        local tmp = getRoomName(id)
-        if tmp then
-          exit_room_id = id
-        else
-          exit_room_id = -1
+  return vnum and getRoomName(vnum) and vnum or -1
+end
+
+---Whether an entry in the GMCP exits is a special exit, which is any entry that
+---isn't a standard direction: its key is the command to send, and its value is the
+---hash or vnum it leads to, the same as any other exit.
+---
+---Speedwalking runs a special exit starting with "script:" as Lua, so one of those
+---is only ever accepted from the user, and never from the server.
+---@param command any The key from the GMCP exits
+---@param destination any The value from the GMCP exits
+---@return boolean
+function Carto:IsSpecialExit(command, destination)
+  return type(command) == "string"
+    and not self.exits.reverse[command]
+    and not command:lower():match("^%s*script:")
+    and (type(destination) == "string" or type(destination) == "number")
+end
+
+---@param from_id number
+---@param to_id number
+---@param command string
+function Carto:SetSpecialExit(from_id, to_id, command)
+  if (getSpecialExitsSwap(from_id) or {})[command] ~= to_id then
+    d("Building a special exit {command} from {from_id} to {to_id}\n")
+    addSpecialExit(from_id, to_id, command)
+  end
+end
+
+-- Connect the room we just left to this one, in every direction where it listed
+-- an exit leading here. This doesn't depend on there being a way back, so one-way
+-- exits get mapped too.
+---@param room_id number
+function Carto:LinkPreviousRoom(room_id)
+  local previous = self.info.previous
+
+  if not previous or not previous.room_id then
+    return
+  end
+
+  local compare_field = self.prefs.gmcp.expect_hash and "hash" or "vnum"
+  local destination = self.info.current[compare_field]
+  local previous_exits = getRoomExits(previous.room_id) or {}
+
+  for prev_dir, prev_dest in pairs(previous.exits or {}) do
+    d("Comparing {prev_dir} - {prev_dest} against {destination}\n")
+    if prev_dest == destination then
+      if self.exits.reverse[prev_dir] then
+        if previous_exits[prev_dir] ~= room_id then
+          d("Building an exit {prev_dir} from {previous.room_id} to {room_id}\n")
+          setExit(previous.room_id, room_id, prev_dir)
         end
-      end
-
-      -- This exit leads to a room we haven't seen before
-      if exit_room_id == -1 then
-        d(f "We haven't seen the {dir} exit before. Creating an exit stub in that direction.\n")
-        local stub_dir = self.exits.stubs[self.exits.map[dir] or dir]
-        if not stub_dir then
-          d(f "  Exit {dir} is not a standard direction; skipping stub creation.\n")
-        else
-          d(f "Checking exit stub {dir} ({stub_dir})\n")
-          if table.index_of(current_stubs, stub_dir) then
-            d(f "  Exit stub {dir} ({stub_dir}) already exists. Skipping.\n")
-          else
-            d(f "  Exit stub {dir} ({stub_dir}) does not exist. Creating it.\n")
-            setExitStub(room_id, stub_dir, true)
-          end
-        end
-      else
-        -- We have seen the room this exit leads to.
-        -- Check if it is the one we just left, so we can connect its exit stub.
-        if self.info and self.info.previous and exit_room_id == self.info.previous.room_id then
-          d(f "Exit {dir} leads to the room we've just left {getRoomName(exit_room_id)} ({exit_room_id}).\n")
-          -- First determine if there is an exit in the previous room leading
-          -- to this.
-          local prev_exits = self.info.previous.exits or {}
-          for prev_dir, prev_dest_hash in pairs(prev_exits) do
-            -- Aha, we found an exit that leads here
-            d(f "Comparing {prev_dir} - {prev_dest_hash} against {self.info.current[compare_field]}\n")
-            if prev_dest_hash == self.info.current[compare_field] then
-              d(f "We found a match in direction {prev_dir} to {room_id}\n")
-              -- Now we need to see if there is an exit already built to
-              -- this room.
-              local exit_dir_exits = getRoomExits(exit_room_id) or {}
-              for direction, dest_room_id in pairs(exit_dir_exits) do
-                d(f "Comparing {dest_room_id} to {room_id}\n")
-                if dest_room_id == room_id then
-                  d(f "All right, there is already an exit from {exit_room_id} ({direction}) to {room_id}\n")
-                  done = true
-                  break
-                else
-                  d(f "No match found for {direction} - {dest_room_id}\n")
-                end
-              end
-              if done == true then
-                break
-              end
-              -- We didn't find any exit in the previous room leading to this,
-              -- so, let's just build one and baaaaaail.
-              d(f "Building an exit from {self.info.previous.room_id} to {room_id}\n")
-              local result
-
-              result = setExit(self.info.previous.room_id, room_id, prev_dir)
-              d(f "Result: {tostring(result)}\n")
-
-              assert(self.prefs.mode == "quick" or self.prefs.mode == "normal",
-                "Unknown mode: " .. tostring(self.prefs.mode))
-              if self.prefs.mode == "quick" then
-                -- We're in quick mode, just build a reciprocal exit
-                d(f "Building a reciprocal exit from {room_id} to {self.info.previous.room_id}\n")
-                result = setExit(room_id, self.info.previous.room_id, self.exits.stubs_reverse[self.exits.stubs[prev_dir]])
-                d(f "Result: {tostring(result)}\n")
-              else
-                -- In normal mode, we build a stub back, because we want to
-                -- ensure that the room we're in has an exit stub back to the
-                -- room we just left.
-                local back_stub = self.exits.stubs[self.exits.map[dir] or dir]
-                if back_stub then
-                  setExitStub(room_id, back_stub, true)
-                else
-                  d(f "  Exit {dir} is not a standard direction; skipping stub creation.\n")
-                end
-              end
-            end
-          end
-        else
-          d(f "We have seen this room {getRoomName(exit_room_id)} ({exit_room_id}) before, but it is not the one we just left.\n")
-          d(f "Current room: ({room_id}) {getRoomName(room_id)}\n")
-          if self.info and self.info.previous then
-            d(f "Previous room: {self.info.previous.room_id} ({getRoomName(self.info.previous.room_id)})\n")
-          end
-          local result
-          if self.prefs.mode == "quick" then
-            d("We're in quick mode, so we'll just build the exit!\n")
-            d("But not if it already exists!\n")
-            if not getRoomExits(room_id)[dir] then
-              d(f "Building exit {dir} from {room_id} to {exit_room_id}\n")
-              setExit(room_id, exit_room_id, dir)
-              local reverse_dir = self.exits.stubs[self.exits.stubs_reverse[self.exits.stubs[dir]]]
-              d(f "Building reciprocal exit {reverse_dir} from {exit_room_id} to {room_id}\n")
-              setExit(exit_room_id, room_id, reverse_dir)
-            else
-              d("The exit already exists!\n")
-            end
-          end
-        end
+      elseif self:IsSpecialExit(prev_dir, prev_dest) then
+        self:SetSpecialExit(previous.room_id, room_id, prev_dir)
       end
     end
   end
+end
+
+---@param room_id number
+function Carto:UpdateExits(room_id)
+  d("Updating exits for room {room_id} - {getRoomName(room_id)}\n")
+
+  local previous = self.info.previous
+  local current = self.info.current
+
+  -- This goes by the exits of the room we left, so it doesn't need any from here.
+  self:LinkPreviousRoom(room_id)
+
+  -- A server that leaves the exits out of the GMCP hasn't told us anything about
+  -- them, which isn't the same as telling us there are none.
+  if not current.exits then
+    d("No exits in the GMCP for room {room_id}. Leaving its exits alone.\n")
+    return
+  end
+
+  local current_exits = getRoomExits(room_id) or {}
+  local current_stubs = getExitStubs1(room_id) or {}
+
+  -- Iterate through the exits from the GMCP event in the room where we have
+  -- arrived, adding new exit stubs for places we haven't seen before.
+  for dir, id in pairs(current.exits) do
+    if self.exits.reverse[dir] then
+      local stub_dir = self.exits.stubs[dir]
+      local exit_room_id = self:ExitRoomId(id)
+
+      if exit_room_id == -1 then
+        -- This exit leads to a room we haven't seen before
+        d("We haven't seen the {dir} exit before. Creating an exit stub in that direction.\n")
+        d("Checking exit stub {dir} ({stub_dir})\n")
+        if table.index_of(current_stubs, stub_dir) then
+          d("  Exit stub {dir} ({stub_dir}) already exists. Skipping.\n")
+        else
+          d("  Exit stub {dir} ({stub_dir}) does not exist. Creating it.\n")
+          setExitStub(room_id, stub_dir, true)
+        end
+      elseif previous and exit_room_id == previous.room_id then
+        -- This exit leads back to the room we just left.
+        d("Exit {dir} leads to the room we've just left {getRoomName(exit_room_id)} ({exit_room_id}).\n")
+        if self.prefs.mode == "quick" then
+          -- We're in quick mode, just build the exit back. The way back isn't
+          -- always the opposite of the way we came, so use the one we were given.
+          if current_exits[dir] ~= exit_room_id then
+            d("Building a reciprocal exit {dir} from {room_id} to {exit_room_id}\n")
+            setExit(room_id, exit_room_id, dir)
+          end
+        elseif not current_exits[dir] then
+          -- In normal mode, we build a stub back, because we want to ensure that
+          -- the room we're in has an exit stub back to the room we just left.
+          setExitStub(room_id, stub_dir, true)
+        end
+      else
+        d("We have seen this room {getRoomName(exit_room_id)} ({exit_room_id}) before, but it is not the one we just left.\n")
+        d("Current room: ({room_id}) {getRoomName(room_id)}\n")
+        if previous and previous.room_id then
+          d("Previous room: {previous.room_id} ({getRoomName(previous.room_id)})\n")
+        end
+        if self.prefs.mode == "quick" then
+          d("We're in quick mode, so we'll just build the exit!\n")
+          d("But not if it already exists!\n")
+          if current_exits[dir] ~= exit_room_id then
+            d("Building exit {dir} from {room_id} to {exit_room_id}\n")
+            setExit(room_id, exit_room_id, dir)
+            -- The reciprocal is only a guess, so it must not replace an exit
+            -- that room already has in that direction.
+            local reverse_dir = self.exits.stubs[self.exits.stubs_reverse[stub_dir]]
+            if not (getRoomExits(exit_room_id) or {})[reverse_dir] then
+              d("Building reciprocal exit {reverse_dir} from {exit_room_id} to {room_id}\n")
+              setExit(exit_room_id, room_id, reverse_dir)
+            end
+          else
+            d("The exit already exists!\n")
+          end
+        end
+      end
+    elseif self.prefs.mode == "quick" and self:IsSpecialExit(dir, id) then
+      -- A special exit has no stub to stand in for it, so one to a room we haven't
+      -- seen yet waits until we have, or until we walk through it.
+      local exit_room_id = self:ExitRoomId(id)
+      if exit_room_id ~= -1 then
+        self:SetSpecialExit(room_id, exit_room_id, dir)
+      end
+    end
+  end
+
+  -- Special exits aren't removed along with the others below. They can be added by
+  -- hand or come with an inherited map, and we can't tell those from the server's.
 
   -- Remove exits that no longer exist
   for dir, _ in pairs(current_exits) do
     if not current.exits[dir] then
       setExit(room_id, -1, dir)
+    end
+  end
+
+  -- Likewise for exit stubs
+  for _, stub_dir in ipairs(current_stubs) do
+    if not current.exits[self.exits.stubs[stub_dir]] then
+      setExitStub(room_id, stub_dir, false)
     end
   end
 end
@@ -1172,6 +1182,15 @@ end
 --
 -- This function updates the doors for a room.
 -- ----------------------------------------------------------------------------
+
+---The name a door goes by in the map. setDoor wants "up" and "down" in full, and all
+---the others short. Anything that isn't a standard direction is a special exit,
+---which goes by its name.
+---@param dir string The full name of a direction, or a special exit
+---@return string command
+function Carto:DoorCommand(dir)
+  return (dir == "up" or dir == "down") and dir or self.exits.reverse[dir] or dir
+end
 
 ---@param room_id number
 function Carto:UpdateDoors(room_id)
@@ -1184,30 +1203,41 @@ function Carto:UpdateDoors(room_id)
   local current_doors = getDoors(room_id) or {}
 
   for dir, door_info in pairs(doors) do
-    local old_status = current_doors[dir]
-    d(f "Door {dir} - {old_status} -> {door_info.status}\n")
-    local command = self.exits.reverse[dir]
-    local door_status = tonumber(door_info.status)
+    local command = self:DoorCommand(dir)
+    local old_status = current_doors[command]
+    local door_status = type(door_info) == "table" and tonumber(door_info.status) or nil
 
-    local door_result, err = setDoor(room_id, command, door_status)
-    d(f "Door {dir} - {old_status} -> {door_info.status} - {door_result}\n")
-    current_doors[command] = door_status
-    if door_result == true then
-      if old_status ~= door_status then
-        table.insert(self.door_changes, {
-          room_id = room_id,
-          command = command,
-          door_status = door_status,
-          old_status = old_status,
-        })
+    if door_status then
+      d("Door {dir} - {old_status} -> {door_status}\n")
+      local door_result, err = setDoor(room_id, command, door_status)
+      d("Door {dir} - {old_status} -> {door_status} - {door_result}\n")
+      current_doors[command] = door_status
+      if door_result == true then
+        if old_status ~= door_status then
+          table.insert(self.door_changes, {
+            room_id = room_id,
+            command = command,
+            door_status = door_status,
+            old_status = old_status,
+          })
+        end
       end
+    else
+      d("Door {dir} has no usable status. Skipping it.\n")
     end
   end
 
-  for dir, _ in pairs(current_doors) do
-    if not doors[self.exits.map[dir]] then
-      d(f "Deleting door {dir} in room {room_id}\n")
-      setDoor(room_id, dir, 0)
+  for dir, old_status in pairs(current_doors) do
+    if not doors[self.exits.map[dir] or dir] then
+      d("Deleting door {dir} in room {room_id}\n")
+      if setDoor(room_id, dir, 0) == true then
+        table.insert(self.door_changes, {
+          room_id = room_id,
+          command = dir,
+          door_status = 0,
+          old_status = old_status,
+        })
+      end
     end
   end
 end
@@ -1223,7 +1253,10 @@ end
 -- ----------------------------------------------------------------------------
 
 function doSpeedWalk()
-  Carto:Speedwalk()
+  -- Uninstalling removes Carto, but Mudlet can still call this from the map.
+  if Carto then
+    Carto:Speedwalk()
+  end
 end
 
 function Carto:ResetState()
@@ -1231,7 +1264,9 @@ function Carto:ResetState()
   self.speedwalk_path = {}
   self.walk_timer = nil
   self.walk_step = nil
-  self.move_tracking = {}
+  self.walk_destination = nil
+  self.paused = false
+  self.step_in_flight = false
 end
 
 -- ----------------------------------------------------------------------------
@@ -1243,22 +1278,119 @@ end
 
 ---@param exception boolean
 ---@param reason string
-function Carto:ResetWalking(exception, reason)
+---@param event string|nil The event to raise, if not the usual one for exception
+function Carto:ResetWalking(exception, reason, event)
   if table.contains(getNamedTimers(self.config.name), self.walk_timer_name) then
     deleteNamedTimer(self.config.name, self.walk_timer_name)
   end
 
-  local event
-  if self.walking then
-    if exception then
-      event = "onSpeedwalkReset"
-    else
-      event = "sysSpeedwalkFinished"
-    end
-  end
+  self:CancelStepTimeout()
+
+  local was_walking = self.walking
 
   self:ResetState()
-  raiseEvent(event, exception, reason)
+
+  if was_walking then
+    event = event or (exception and "onSpeedwalkReset" or "sysSpeedwalkFinished")
+    raiseEvent(event, exception, reason)
+  end
+end
+
+-- ----------------------------------------------------------------------------
+-- PauseWalking / ResumeWalking
+--
+-- Pausing holds the walk where it is, and the character is free to go elsewhere
+-- in the meantime. Resuming finds a new path to the destination if they did.
+-- ----------------------------------------------------------------------------
+
+function Carto:PauseWalking()
+  if not self.walking then
+    cecho("<orange>You are not walking.\n")
+    return
+  end
+
+  if self.paused then
+    cecho("<orange>Your walk is already paused.\n")
+    return
+  end
+
+  self.paused = true
+  deleteNamedTimer(self.config.name, self.walk_timer_name)
+  self:CancelStepTimeout()
+  raiseEvent("sysSpeedwalkPaused")
+  cecho("<chartreuse>Speedwalk paused.\n")
+end
+
+function Carto:ResumeWalking()
+  if not self.walking then
+    cecho("<orange>You are not walking.\n")
+    return
+  end
+
+  if not self.paused then
+    cecho("<orange>Your walk is not paused.\n")
+    return
+  end
+
+  self.paused = false
+  raiseEvent("sysSpeedwalkResumed")
+  cecho("<chartreuse>Speedwalk resumed.\n")
+
+  -- The last step we sent hasn't landed yet, so Move will carry on when it does.
+  if self.step_in_flight then
+    self:ArmStepTimeout()
+    return
+  end
+
+  local current_room_id = self.info.current.room_id
+  if current_room_id ~= self.walk_step and not self:FindNewPath(current_room_id) then
+    cecho("<orange>No path to your destination from here.\n")
+    self:ResetWalking(true, "No path to the destination.")
+    return
+  end
+
+  self:Step()
+end
+
+---Replaces what's left of the walk with a path from the given room.
+---@param room_id number
+---@return boolean found Whether there is a path to the destination
+function Carto:FindNewPath(room_id)
+  self.walk_step = room_id
+
+  if room_id == self.walk_destination then
+    self.speedwalk_path = {}
+    return true
+  end
+
+  if not getPath(room_id, self.walk_destination) then
+    return false
+  end
+
+  self.speedwalk_path = self:PathFromSpeedwalkGlobals()
+
+  return true
+end
+
+---Reads the path that Mudlet leaves in speedWalkDir and speedWalkPath.
+---@return table path A list of {direction, room_id} steps
+function Carto:PathFromSpeedwalkGlobals()
+  local path = {}
+
+  ---@diagnostic disable-next-line: param-type-mismatch
+  for i, dir in ipairs(speedWalkDir) do
+    table.insert(path, { dir, tonumber(speedWalkPath[i]) })
+  end
+
+  return path
+end
+
+---Tells the user and any listening scripts that a walk they asked for won't happen.
+---A walk already under way isn't affected, so this doesn't go through ResetWalking.
+---@param reason string
+function Carto:WalkNotStarted(reason)
+  cecho("<orange>" .. reason .. "\n")
+  raiseEvent("onSpeedwalkFailed", reason)
 end
 
 -- ----------------------------------------------------------------------------
@@ -1269,77 +1401,50 @@ end
 -- ----------------------------------------------------------------------------
 
 function Carto:Speedwalk()
-  if not self.info then
-    cecho(f "{self.config.name} cannot determine your current room.\n")
-    return
-  end
-
-  if not self.info.current then
-    cecho(f "{self.config.name} cannot determine your current room.\n")
+  if not self.info or not self.info.current or not self.info.current.room_id then
+    self:WalkNotStarted(f "{self.config.name} cannot determine your current room.")
     return
   end
 
   if self.walking then
-    cecho("<orange>You are already walking!\n")
+    self:WalkNotStarted("You are already walking!")
     return
   end
 
   self.speedwalk_path = {}
-  if not next(self.info.current.exits) then
-    cecho("<orange>No speedwalk direction found.\n")
-    self:ResetWalking(true, "No speedwalk direction found.")
-    return
-  end
 
   if not next(speedWalkPath) then
-    cecho("<orange>No speedwalk path found.\n")
-    self:ResetWalking(true, "No speedwalk path found.")
+    self:WalkNotStarted("No speedwalk path found.")
     return
   end
 
-  ---@diagnostic disable-next-line: param-type-mismatch
-  for i, dir in ipairs(speedWalkDir) do
-    local room_id = tonumber(speedWalkPath[i])
-    table.insert(self.speedwalk_path, { dir, room_id })
-  end
+  self.speedwalk_path = self:PathFromSpeedwalkGlobals()
 
-  -- Get the first exit, because speedWalkDir does not include the current room
-  -- Inserts {nil, room_id} at the beginning of the path
-  d(f "self.info.current.room_id: {self.info.current.room_id}\n")
-  local room_exits = getRoomExits(self.info.current.room_id) or {}
-  if not next(room_exits) then
-    cecho("<orange>No exits found.\n")
-    self:ResetWalking(true, "No exits found.")
+  -- The path has to start from here. It may start through a special exit, which
+  -- getRoomExits doesn't list.
+  d("self.info.current.room_id: {self.info.current.room_id}\n")
+  local current_room_id = self.info.current.room_id
+  local first_room_id = self.speedwalk_path[1][2]
+  if not table.contains(getRoomExits(current_room_id) or {}, first_room_id)
+    and not table.contains(getSpecialExitsSwap(current_room_id) or {}, first_room_id) then
+    self.speedwalk_path = {}
+    self:WalkNotStarted("No exits found.")
     return
   end
 
-  for dir, room_id in pairs(room_exits) do
-    if room_id == self.speedwalk_path[1][2] then
-      local to_insert = { "", self.info.current.room_id }
-      table.insert(self.speedwalk_path, 1, to_insert)
-      break
-    end
-  end
-
+  -- speedWalkDir does not include the current room, so add it as the starting
+  -- step, which is the one step that has no direction.
+  table.insert(self.speedwalk_path, 1, { "", current_room_id })
 
   self.walking = true
   local destination_id = self.speedwalk_path[#self.speedwalk_path][2]
+  self.walk_destination = destination_id
   local destination_name = getRoomName(destination_id)
-  d(f "Walking to {destination_name} ({destination_id}) from {self.info.current.name} ({self.info.current.room_id}).\n")
-
-  registerNamedTimer(
-    self.config.name,
-    self.walk_timer_name,
-    self.prefs.speedwalk_delay,
-    function() self:Step() end,
-    false
-  )
-
-  stopNamedTimer(self.config.name, "Carto:Step")
-
-  self:Step()
+  d("Walking to {destination_name} ({destination_id}) from {self.info.current.name} ({self.info.current.room_id}).\n")
 
   raiseEvent("sysSpeedwalkStarted")
+
+  self:Step()
 end
 
 -- ----------------------------------------------------------------------------
@@ -1349,19 +1454,12 @@ end
 -- the current room's ID against the expected room's ID, handles the starting
 -- room, and sends the appropriate direction command to move to the next room.
 --
--- It is called by the initial timer set in Speedwalk and if there are
--- remaining steps to be taken, as determined by the Move function, then
--- it will be called again.
+-- It is called directly by Speedwalk to take the first step, and after that by
+-- the timer that Move sets each time a step lands.
 -- ----------------------------------------------------------------------------
 
 function Carto:Step()
-  -- Stop the timer. It will be resumed when they moved to the next room.
-  -- Or not, if they've arrived at their destination.
-  stopNamedTimer(self.config.name, self.walk_timer_name)
-
-  if not next(self.speedwalk_path) then
-    cecho(f "<chartreuse>You have arrived at {self.info.current.name}.\n")
-    self:ResetWalking(false, "Arrived at destination.")
+  if self.paused then
     return
   end
 
@@ -1375,7 +1473,7 @@ function Carto:Step()
   local current_step = self.speedwalk_path[1]
 
   -- Check if this is the starting room (which doesn't have a direction)
-  if current_step[1] == "" then
+  if current_step and current_step[1] == "" then
     if current_room_id ~= current_step[2] then
       cecho("<orange>You are not in the expected starting room.\n")
       cecho(f "<orange>Expected you to be in room {current_step[2]} ({getRoomName(current_step[2])}).\n")
@@ -1385,10 +1483,6 @@ function Carto:Step()
     end
 
     table.remove(self.speedwalk_path, 1)
-    if not next(self.speedwalk_path) then
-      cecho(f "<chartreuse>You have arrived at {self.info.current.name}.\n")
-      return
-    end
     self.walk_step = current_room_id
     -- We have to force a step here to move to the actual next room, since
     -- the first step is the starting room.
@@ -1396,25 +1490,19 @@ function Carto:Step()
     return
   end
 
-  d(f "Current room: {current_room_id} ({getRoomName(current_room_id)})\n")
-  d(f "Walk step: {self.walk_step} ({getRoomName(self.walk_step)})\n")
+  d("Current room: {current_room_id} ({getRoomName(current_room_id)})\n")
+  d("Walk step: {self.walk_step} ({getRoomName(self.walk_step)})\n")
   -- Check if we're in the expected room before moving
   if current_room_id ~= self.walk_step then
-    if next(self.move_tracking) then
-      local last_move = self.move_tracking[#self.move_tracking]
-      if last_move then
-        if current_room_id == last_move.prev_room_id then
-          cecho("<orange>Something prevents you from continuing.\n")
-        else
-          cecho("<orange>1. You have veered off the expected path.\n")
-        end
-      else
-        cecho("<orange>2. You have veered off the expected path.\n")
-      end
-    else
-      cecho("<orange>3. You have veered off the expected path.\n")
-    end
+    cecho("<orange>You have veered off the expected path.\n")
     self:ResetWalking(true, "You have veered off the expected path.")
+    return
+  end
+
+  -- We're where we should be. If that's the end of the path, we've arrived.
+  if not current_step then
+    cecho(f "<chartreuse>You have arrived at {self.info.current.name}.\n")
+    self:ResetWalking(false, "Arrived at destination.")
     return
   end
 
@@ -1424,18 +1512,99 @@ function Carto:Step()
 
   self.walk_step = next_room_id
 
-  local full_dir = self.exits.map[dir] or self.exits.reverse[dir]
-  if not full_dir then
-    cecho("<orange>Invalid direction: " .. dir .. "\n")
-    self:ResetWalking(true, "Invalid direction.")
-    return
-  end
+  d("Moving {dir} to {next_room_id} ({getRoomName(next_room_id)})\n")
 
-  d(f "Moving {full_dir} to {next_room_id} ({getRoomName(next_room_id)})\n")
-  send(full_dir, true)
+  self.step_in_flight = true
+  self:OpenDoor(current_room_id, dir)
+
+  -- Special exits are either a script to run or a command to send as it is.
+  local script = dir:match("^script:(.*)$")
+  if script then
+    local ok, err = pcall(function() assert(loadstring(script))() end)
+    if not ok then
+      cecho(f "<orange>The special exit script failed: {err}\n")
+      self:ResetWalking(true, "The special exit script failed.")
+      return
+    end
+  else
+    send(self.exits.map[dir] or self.exits.reverse[dir] or dir, true)
+  end
 
   -- Remove the current step as we've just executed it
   table.remove(self.speedwalk_path, 1)
+
+  -- A script: exit can land, or end the walk, before it returns.
+  if self.step_in_flight then
+    self:ArmStepTimeout()
+  end
+end
+
+-- ----------------------------------------------------------------------------
+-- Step timeout
+--
+-- A move that fails doesn't have to tell us anything, and the room may well update
+-- for other reasons in the meantime, so the only sign that a step didn't work is
+-- that we're still waiting for it after a while.
+-- ----------------------------------------------------------------------------
+
+function Carto:ArmStepTimeout()
+  if self.prefs.speedwalk_timeout > 0 then
+    registerNamedTimer(
+      self.config.name,
+      self.step_timeout_name,
+      self.prefs.speedwalk_timeout,
+      function()
+        cecho("<orange>Something prevents you from continuing.\n")
+        self:ResetWalking(true, "Something prevents you from continuing.")
+      end
+    )
+  end
+end
+
+function Carto:CancelStepTimeout()
+  deleteNamedTimer(self.config.name, self.step_timeout_name)
+end
+
+---@param timeout any Seconds to wait for a step, or 0 to wait for as long as it takes
+function Carto:SetSpeedwalkTimeout(timeout)
+  timeout = tonumber(timeout)
+  if not timeout or timeout < 0 then
+    cecho("<orange>Walk timeout must be a number of seconds, or 0 for none.\n")
+    return
+  end
+
+  self.prefs.speedwalk_timeout = timeout
+  self:SavePreferences()
+
+  local unit = timeout == 1 and "second" or "seconds"
+  cecho(f "<chartreuse>Walk timeout set to {timeout} {unit}.\n")
+end
+
+---Sends what it takes to get through any door the map has in this direction, going
+---by the status the map has for it: 1 is open, 2 is closed, and 3 is locked. Doors
+---on special exits are left alone, because the exit's command is all we know.
+---@param room_id number
+---@param dir string
+function Carto:OpenDoor(room_id, dir)
+  local direction = self.exits.map[dir] or dir
+
+  if not self.exits.reverse[direction] then
+    return
+  end
+
+  local status = (getDoors(room_id) or {})[self:DoorCommand(direction)]
+
+  local function door_command(action)
+    return (self.prefs.doors[action]:gsub("{dir}", direction))
+  end
+
+  if status == 3 then
+    send(door_command("unlock"), true)
+  end
+
+  if status == 2 or status == 3 then
+    send(door_command("open"), true)
+  end
 end
 
 -- ----------------------------------------------------------------------------
@@ -1448,12 +1617,18 @@ end
 ---@param delay number
 ---@param override boolean
 function Carto:SetSpeedwalkDelay(delay, override)
-  delay = tonumber(delay) or 0
+  delay = tonumber(delay)
+  if not delay then
+    cecho("<orange>Walk speed must be a number of seconds.\n")
+    return
+  end
+
   if delay < self.prefs.speedwalk_delay_min and not override then
     delay = self.prefs.speedwalk_delay_min
   end
 
   self.prefs.speedwalk_delay = delay
+  self:SavePreferences()
 
   local unit = self.prefs.speedwalk_delay == 1 and "second" or "seconds"
   cecho(f "<chartreuse>Walk speed set to {self.prefs.speedwalk_delay} {unit} per step.\n")
@@ -1466,13 +1641,30 @@ end
 -- profile.
 -- ----------------------------------------------------------------------------
 
+---The room the player is in. getPlayerRoom only answers while a map is open, but
+---we know where they are from the GMCP whether it is or not.
+---@return number|nil room_id
+function Carto:CurrentRoomId()
+  return self.info.current and self.info.current.room_id or getPlayerRoom()
+end
+
 ---@param position number|nil
 function Carto:RememberRoom(position)
-  local room_id = getPlayerRoom()
+  local room_id = self:CurrentRoomId()
+
+  if not room_id then
+    cecho("<orange>Unable to determine your current location.\n")
+    return
+  end
 
   if position == nil then
     position = #self.prefs.recalls + 1
   else
+    if position < 1 or position ~= math.floor(position) then
+      cecho("<orange>A recall position must be a whole number of at least 1.\n")
+      return
+    end
+
     if position > #self.prefs.recalls then
       position = #self.prefs.recalls + 1
     end
@@ -1511,7 +1703,7 @@ function Carto:ForgetRoom(position)
   end
 
   if position == nil then
-    local room_id = getPlayerRoom()
+    local room_id = self:CurrentRoomId()
     position = table.index_of(self.prefs.recalls, room_id)
     if not position then
       cecho("<orange>You are not in a recall point.\n")
@@ -1544,15 +1736,19 @@ function Carto:RecallRoom(position)
     return
   end
 
-  if not self.prefs.recalls[position] then
-    cecho("<orange>No recall point at position " .. position .. ".\n")
+  if not position or not self.prefs.recalls[position] then
+    cecho("<orange>No recall point at position " .. tostring(position) .. ".\n")
     return
   end
 
   local room_id = self.prefs.recalls[position]
-  local room_name = getRoomName(room_id)
+  local room_name = getRoomName(room_id) or "unknown room"
   cecho(f "<chartreuse>Recalling to room {room_id} ({room_name}).\n")
-  gotoRoom(room_id)
+
+  local result, message = gotoRoom(room_id)
+  if not result then
+    cecho("<orange>Could not recall: " .. tostring(message) .. ".\n")
+  end
 end
 
 -- ----------------------------------------------------------------------------
@@ -1568,20 +1764,140 @@ function Carto:DisplayRecalls()
   end
 
   cecho("<chartreuse>Recall points:\n")
-  for position, room_id in pairs(self.prefs.recalls) do
-    local room_name = getRoomName(room_id)
+  for position, room_id in ipairs(self.prefs.recalls) do
+    -- The room may be gone, if the map has been reset since it was remembered.
+    local room_name = getRoomName(room_id) or "unknown room"
     cecho("<chartreuse>" .. string.format("  %2d: %s\n", position, room_name))
   end
 end
 
 -- ----------------------------------------------------------------------------
--- GetSpeedwalkDelay
+-- DisplayRoom
 --
--- This function returns the current speedwalk delay value.
+-- This function shows what the map knows about a room.
+-- ----------------------------------------------------------------------------
+
+---@param room_id number|nil Defaults to the current room
+function Carto:DisplayRoom(room_id)
+  room_id = room_id or self:CurrentRoomId()
+
+  if not room_id then
+    cecho("<orange>Unable to determine your current location.\n")
+    return
+  end
+
+  local name = getRoomName(room_id)
+  if not name then
+    cecho(f "<orange>Room {room_id} is not on the map.\n")
+    return
+  end
+
+  local function show(label, value)
+    cecho(f "<hot_pink>{label}<reset>: ")
+    echo(tostring(value) .. "\n")
+  end
+
+  local function destination(to_id)
+    return to_id .. " (" .. (getRoomName(to_id) or "unknown room") .. ")"
+  end
+
+  local door_names = { "open", "closed", "locked" }
+  local doors = getDoors(room_id) or {}
+  local function door(command)
+    local status = door_names[doors[command]]
+    return status and f " [{status} door]" or ""
+  end
+
+  local x, y, z = getRoomCoordinates(room_id)
+
+  show("Room", destination(room_id))
+  show("Area", getRoomAreaName(getRoomArea(room_id)))
+  show("Coordinates", f "{x}, {y}, {z}")
+  show("Environment", getRoomEnv(room_id))
+  show("Weight", getRoomWeight(room_id))
+  show("Locked", roomLocked(room_id))
+  show("Hash", getRoomHashByID(room_id) or "none")
+
+  local exits = getRoomExits(room_id) or {}
+  local stubs = {}
+
+  for _, stub_dir in ipairs(getExitStubs1(room_id) or {}) do
+    stubs[self.exits.stubs[stub_dir]] = true
+  end
+
+  -- In the order of their numbers, so that they don't move around between looks.
+  for n = 1, 12 do
+    local dir = self.exits.stubs[n]
+    local command = self:DoorCommand(dir)
+    if exits[dir] then
+      show(f "Exit {dir}", destination(exits[dir]) .. door(command))
+    elseif stubs[dir] then
+      show(f "Exit {dir}", "unexplored" .. door(command))
+    end
+  end
+
+  local special_exits = getSpecialExitsSwap(room_id) or {}
+  local commands = table.keys(special_exits)
+  table.sort(commands)
+
+  for _, command in ipairs(commands) do
+    show(f "Special exit {command}", destination(special_exits[command]) .. door(command))
+  end
+end
+
+-- ----------------------------------------------------------------------------
+-- DisplayPath
+--
+-- This function shows the way from one room to another, without walking it.
+-- ----------------------------------------------------------------------------
+
+---@param from_id number|nil Defaults to the current room
+---@param to_id number
+function Carto:DisplayPath(from_id, to_id)
+  from_id = from_id or self:CurrentRoomId()
+
+  if not from_id then
+    cecho("<orange>Unable to determine your current location.\n")
+    return
+  end
+
+  for _, room_id in ipairs({ from_id, to_id }) do
+    if not getRoomName(room_id) then
+      cecho(f "<orange>Room {room_id} is not on the map.\n")
+      return
+    end
+  end
+
+  if from_id == to_id then
+    cecho("<orange>Those are the same room.\n")
+    return
+  end
+
+  if not getPath(from_id, to_id) then
+    cecho(f "<orange>There is no path from {from_id} to {to_id}.\n")
+    return
+  end
+
+  local steps = #speedWalkDir
+  local unit = steps == 1 and "step" or "steps"
+
+  cecho(f "<chartreuse>From {getRoomName(from_id)} to {getRoomName(to_id)}, {steps} {unit}:\n")
+  echo(table.concat(speedWalkDir, ", ") .. "\n")
+end
+
+-- ----------------------------------------------------------------------------
+-- GetSpeedwalkDelay / GetSpeedwalkTimeout
+--
+-- These functions return the values that SetSpeedwalkDelay and
+-- SetSpeedwalkTimeout set.
 -- ----------------------------------------------------------------------------
 
 function Carto:GetSpeedwalkDelay()
   return self.prefs.speedwalk_delay
+end
+
+function Carto:GetSpeedwalkTimeout()
+  return self.prefs.speedwalk_timeout
 end
 
 -- ----------------------------------------------------------------------------
@@ -1598,10 +1914,9 @@ function Carto:TableFromPackage(gmcp_package)
 
   -- Traverse through the keys to find the nested table
   for i = 2, #keys do
-    local key = keys[i]
-    if next(current_table) then
-      current_table = current_table[key]
-    else
+    current_table = current_table[keys[i]]
+
+    if type(current_table) ~= "table" then
       return nil -- Return nil if the key doesn't exist
     end
   end
@@ -1627,10 +1942,15 @@ Syntax: <b>walk</b> [<b>command</b>]
 
   <b>walk</b> - See this help text.
   <b>walk stop</b> - Stop walking.
+  <b>walk pause</b> - Pause walking.
+  <b>walk resume</b> - Resume walking, from wherever you are now.
+  <b>walk path</b> [<<b>from_id</b>>] <<b>to_id</b>> - See the way to a room, without walking it.
   <b>walk slow</b> - Set walk speed to {Carto.config.speed_walk_slow} seconds per step.
   <b>walk fast</b> - Set walk speed to {Carto.config.speed_walk_fast} seconds per step.
   <b>walk speed</b> - See your current walk speed.
   <b>walk speed</b> <<b>n</b>> - Set walk speed to <i>n</i> seconds per step.
+  <b>walk timeout</b> - See how long to wait for a step before giving up.
+  <b>walk timeout</b> <<b>n</b>> - Wait <i>n</i> seconds for a step, or 0 for as long as it takes.
   <b>walk to</b> <<b>room_id</b>> - Walk to room <i>room_id</i>.
   <b>walk remember</b> - Remember the current room.
   <b>walk remember</b> <<b>position</b>> - Remember the current room at <i>position</i>.
@@ -1639,7 +1959,7 @@ Syntax: <b>walk</b> [<b>command</b>]
   <b>walk recall</b> - List all recall positions.
   <b>walk recall</b> <<b>position</b>> - Recall to the room at <i>position</i>.
 
-Type <h1>carto</h1> to see your current GMCP settings.
+Type <h1>carto config</h1> to see your current GMCP settings.
 ]],
     carto_config = f [[
 <h1><u>{Carto.config.name}</u></h1>
@@ -1648,6 +1968,9 @@ Syntax: <b>carto</b> [<b>setting</b>] [<b>value</b>]
 
   <b>carto</b> - See this help text.
   <b>carto config</b> - See the current GMCP config settings for {Carto.config.name}.
+  <b>carto room</b> [<<b>room_id</b>>] - See what the map knows about a room, or the current one.
+  <b>carto doors</b> - See the commands used to get through doors while walking.
+  <b>carto doors</b> <<b>open</b>|<b>unlock</b>> <<b>command</b>> - Set one, where <i>{"{dir}"}</i> is the direction.
   <b>carto mode</b> <<b>quick</b>|<b>normal</b>> - Set the mode for building exits.
   <b>carto event</b> <<b>event</b>> - Set the GMCP event for processing room updates.
   <b>carto expect_coordinates</b> <<b>true</b>|<b>false</b>> - Set to <b>true</b> to enable coordinate processing.

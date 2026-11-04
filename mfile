@@ -1,9 +1,12 @@
 {
   "package": "Carto",
   "title": "GMCP mapper script for Mudlet",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "author": "gesslar",
   "icon": "treasure-map.png",
   "dependencies": "",
-  "outputFile": true
+  "outputFile": true,
+  "ignore": [
+    "resources/test/*"
+  ]
 }
